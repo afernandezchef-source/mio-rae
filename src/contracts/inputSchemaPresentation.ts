@@ -57,13 +57,124 @@ const referencedDescription = (
   return undefined;
 };
 
+const booleanLiteralKeys = new Set([
+  "type",
+  "default",
+  "description",
+  "title",
+  "examples",
+]);
+
+const isPlainBooleanSchema = (
+  value: unknown,
+): value is Readonly<Record<string, unknown>> =>
+  isObject(value) &&
+  value.type === "boolean" &&
+  Object.keys(value).every((key) => booleanLiteralKeys.has(key));
+
+const firstDefined = (
+  schemas: readonly Readonly<Record<string, unknown>>[],
+  key: string,
+): Readonly<Record<string, unknown>> => {
+  const owner = schemas.find((schema) => schema[key] !== undefined);
+  return owner === undefined ? {} : { [key]: owner[key] };
+};
+
+// Folding alternatives must not drop the examples the combinator or any of
+// its branches advertised.
+const mergedExamples = (
+  schemas: readonly Readonly<Record<string, unknown>>[],
+): Readonly<Record<string, unknown>> => {
+  const examples: unknown[] = [];
+  for (const schema of schemas)
+    for (const example of Array.isArray(schema.examples) ? schema.examples : [])
+      if (!examples.some((seen) => isDeepStrictEqual(seen, example)))
+        examples.push(example);
+  return examples.length === 0 ? {} : { examples };
+};
+
+// An object alternative whose own property is a boolean literal is selected
+// by that literal. Once the literal is presented as a plain boolean, sibling
+// alternatives can overlap, so an exclusive `oneOf` would reject inputs the
+// canonical union accepts; such unions are advertised as `anyOf`.
+const hasBooleanLiteralProperty = (
+  alternative: unknown,
+  root: Readonly<Record<string, unknown>>,
+): boolean => {
+  // The shared projection can place a branch or its discriminant behind a
+  // local reference; the literal is then visible only through that reference.
+  const resolved = resolveLocalReference(root, alternative);
+  if (!isObject(resolved) || !isObject(resolved.properties)) return false;
+  return Object.values(resolved.properties).some((property) => {
+    const value = resolveLocalReference(root, property);
+    return isObject(value) && typeof value.const === "boolean";
+  });
+};
+
+const resolveLocalReference = (
+  root: Readonly<Record<string, unknown>>,
+  value: unknown,
+): unknown =>
+  isObject(value) && typeof value.$ref === "string"
+    ? resolveReference(root, value.$ref)
+    : value;
+
+// Some clients render `const` as a one-member `enum`, and Google function
+// declarations accept only string enum members, so one advertised boolean
+// literal fails the whole catalog (morluto/rea#4025). Present a boolean
+// literal as its declared type and fold alternatives that differ only in the
+// literal into one boolean. The canonical Zod schema still enforces the
+// exact literal and the union branch it selects.
+const presentBooleanLiterals = (
+  schema: Readonly<Record<string, unknown>>,
+  original: Readonly<Record<string, unknown>>,
+  root: Readonly<Record<string, unknown>>,
+): Readonly<Record<string, unknown>> => {
+  const { const: literal, ...withoutLiteral } = schema;
+  let presented =
+    typeof literal === "boolean" &&
+    (withoutLiteral.type === undefined || withoutLiteral.type === "boolean")
+      ? { ...withoutLiteral, type: "boolean" }
+      : schema;
+  if (
+    Array.isArray(original.oneOf) &&
+    Array.isArray(presented.oneOf) &&
+    original.oneOf.some((alternative) =>
+      hasBooleanLiteralProperty(alternative, root),
+    )
+  ) {
+    const { oneOf, ...rest } = presented;
+    presented = { ...rest, anyOf: oneOf };
+  }
+  for (const combinator of ["anyOf", "oneOf"]) {
+    const alternatives = presented[combinator];
+    if (
+      !Array.isArray(alternatives) ||
+      alternatives.length === 0 ||
+      !alternatives.every(isPlainBooleanSchema)
+    )
+      continue;
+    const { [combinator]: _alternatives, ...rest } = presented;
+    if (rest.type !== undefined && rest.type !== "boolean") continue;
+    return {
+      ...firstDefined(alternatives, "description"),
+      ...firstDefined(alternatives, "title"),
+      ...firstDefined(alternatives, "default"),
+      ...rest,
+      ...mergedExamples([rest, ...alternatives]),
+      type: "boolean",
+    };
+  }
+  return presented;
+};
+
 const describeSchema = (
   schema: unknown,
   root: Readonly<Record<string, unknown>>,
   describeProperty: (property: string) => string | undefined,
 ): unknown => {
   if (!isObject(schema)) return schema;
-  return Object.fromEntries(
+  const described = Object.fromEntries(
     Object.entries(schema).map(([key, value]) => {
       if (schemaMaps.has(key) && isObject(value))
         return [
@@ -103,6 +214,7 @@ const describeSchema = (
       return [key, value];
     }),
   );
+  return presentBooleanLiterals(described, schema, root);
 };
 
 const objectBranch = (

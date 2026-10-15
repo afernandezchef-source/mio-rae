@@ -25,9 +25,12 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 import { Client } from "@modelcontextprotocol/client";
 import { StdioClientTransport } from "@modelcontextprotocol/client/stdio";
 
-if (process.platform !== "win32" || process.arch !== "x64")
+if (
+  process.platform !== "win32" ||
+  (process.arch !== "x64" && process.arch !== "arm64")
+)
   throw new Error(
-    "Packaged Windows Ghidra acceptance requires a Windows x64 host.",
+    "Packaged Windows Ghidra acceptance requires a Windows x64 or ARM64 host.",
   );
 const exec = promisify(execFile);
 const arguments_ = process.argv.slice(2);
@@ -211,7 +214,7 @@ const entry = join(packageRoot, "scripts/rea.mjs");
 const report = {
   ok: false,
   platform: "win32",
-  architecture: "x64",
+  architecture: process.arch,
   nonAdmin: true,
   targetSha256: sha256,
   targetArchitecture: parsedTarget.value.architecture,

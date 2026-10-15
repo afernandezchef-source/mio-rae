@@ -38,9 +38,12 @@ const SESSION_CAPABILITIES = GHIDRA_SESSION_CAPABILITIES.filter(
   (name) => !GHIDRA_MUTATING_OPERATIONS.has(name),
 );
 
-if (process.platform !== "win32" || process.arch !== "x64")
+if (
+  process.platform !== "win32" ||
+  (process.arch !== "x64" && process.arch !== "arm64")
+)
   throw new Error(
-    "The real Windows Ghidra verifier requires a Windows x64 host",
+    "The real Windows Ghidra verifier requires a Windows x64 or ARM64 host",
   );
 if (
   windowsP0Capabilities().some(
@@ -302,7 +305,7 @@ try {
     },
     limitations: [
       "approved-non-sensitive-fixtures-only",
-      "windows-x64-local-ntfs-only",
+      "windows-x64-or-arm64-local-ntfs-only",
       "native-x86-and-x86-64-pe-applications-and-dlls-only",
       "no-gui-or-mutation-authority",
     ],

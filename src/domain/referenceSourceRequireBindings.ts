@@ -48,13 +48,16 @@ export const unshadowedReferenceSourceRequireCalls = (
     file.program,
     references,
   );
-  const requireLoaderWasWritten = [...references.values()].some(
-    (reference) =>
-      reference.name === "require" &&
-      reference.role === "write" &&
-      (reference.resolution === "unbound" ||
-        reference.bindingId === programRequireBinding),
+  const hasRequireWrite = [...references.values()].some(
+    (reference) => reference.name === "require" && reference.role === "write",
   );
+  const requireLoaderWasWritten =
+    hasRequireWrite &&
+    loaderWriteReachesProgramScope(
+      file.program,
+      references,
+      programRequireBinding,
+    );
   const isLoaderReference = (identifier: t.Identifier): boolean => {
     const start = identifier.loc?.start;
     const reference =
@@ -175,11 +178,267 @@ const contains = (container: t.Node, node: t.Node): boolean =>
   container.start <= node.start &&
   node.end <= container.end;
 
+const loaderWriteReachesProgramScope = (
+  program: t.Program,
+  references: ReadonlyMap<string, JavaScriptSemanticReference>,
+  programRequireBinding: string,
+): boolean => {
+  let reached = false;
+  traverseJavaScriptAst(program, {
+    enter: (node, _parent, readAncestors) => {
+      if (reached || !t.isIdentifier(node, { name: "require" })) return;
+      const start = node.loc?.start;
+      const reference =
+        start === undefined
+          ? undefined
+          : references.get(`${start.line}:${start.column}`);
+      if (reference?.role !== "write") return;
+      if (
+        reference.resolution === "unbound" ||
+        reference.bindingId === programRequireBinding
+      ) {
+        reached = true;
+        return;
+      }
+      if (
+        (reference.resolution === "unknown" ||
+          reference.resolution === "ambiguous") &&
+        !writeShieldedByLocalBinding(node, readAncestors())
+      ) {
+        reached = true;
+      }
+    },
+  });
+  return reached;
+};
+
+const bindsRequireIdentifier = (
+  patterns: readonly (t.Node | null | undefined)[],
+): boolean => {
+  const identifiers: t.Node[] = [];
+  const collect = (pattern: t.Node | null | undefined): void => {
+    if (pattern === null || pattern === undefined) return;
+    if (t.isIdentifier(pattern)) {
+      identifiers.push(pattern);
+      return;
+    }
+    if (t.isTSParameterProperty(pattern)) {
+      collect(pattern.parameter);
+      return;
+    }
+    if (
+      t.isObjectPattern(pattern) ||
+      t.isArrayPattern(pattern) ||
+      t.isRestElement(pattern) ||
+      t.isAssignmentPattern(pattern)
+    )
+      identifiers.push(pattern);
+  };
+  for (const pattern of patterns) collect(pattern);
+  return identifiers.some((identifier) =>
+    Object.hasOwn(t.getBindingIdentifiers(identifier), "require"),
+  );
+};
+
+/**
+ * Whether a function body binds `require` at a position visible to the
+ * body's own scope. Results memoize per body node: large generated files
+ * hold many dynamic writes against one shared function, and each used to
+ * re-traverse the same body in full.
+ */
+const functionBodyBindingCache = new WeakMap<t.BlockStatement, boolean>();
+
+const functionBodyBindsRequire = (body: t.Node | null | undefined): boolean => {
+  if (body === null || body === undefined || !t.isBlockStatement(body))
+    return false;
+  const cached = functionBodyBindingCache.get(body);
+  if (cached !== undefined) return cached;
+  const result = scanFunctionBodyForRequire(body);
+  functionBodyBindingCache.set(body, result);
+  return result;
+};
+
+const scanFunctionBodyForRequire = (body: t.BlockStatement): boolean => {
+  let found = false;
+  let depth = 0;
+  traverseJavaScriptAst(body, {
+    enter: (node, parent) => {
+      if (found || node === body) return;
+      if (t.isFunction(node) || t.isClass(node)) {
+        if (
+          t.isFunctionDeclaration(node) &&
+          parent === body &&
+          node.id?.name === "require"
+        )
+          found = true;
+        depth += 1;
+        return;
+      }
+      if (depth > 0) return;
+      if (
+        t.isVariableDeclaration(node, { kind: "var" }) &&
+        node.declarations.some((declaration) =>
+          bindsRequireIdentifier([declaration.id]),
+        )
+      )
+        found = true;
+    },
+    exit: (node) => {
+      if (node !== body && (t.isFunction(node) || t.isClass(node))) depth -= 1;
+    },
+  });
+  return found;
+};
+
+const isComputedKeyOf = (scope: t.Node, child: t.Node): boolean =>
+  (t.isObjectMethod(scope) || t.isClassMethod(scope)) &&
+  scope.computed &&
+  (scope.key === child || contains(scope.key, child));
+
+const blockBindsLexicalRequire = (body: readonly t.Node[]): boolean =>
+  body.some(
+    (statement) =>
+      t.isVariableDeclaration(statement) &&
+      statement.kind !== "var" &&
+      statement.declarations.some((declaration) =>
+        bindsRequireIdentifier([declaration.id]),
+      ),
+  );
+
+const writeShieldedByLocalBinding = (
+  node: t.Node,
+  ancestors: readonly t.Node[],
+): boolean => {
+  let child: t.Node = node;
+  for (let index = ancestors.length - 1; index >= 0; index -= 1) {
+    const scope = ancestors[index];
+    if (scope === undefined) continue;
+    if (t.isProgram(scope)) return false;
+    if (t.isFunction(scope)) {
+      if (isComputedKeyOf(scope, child)) {
+        child = scope;
+        continue;
+      }
+      if (bindsRequireIdentifier(scope.params)) return true;
+      if (child === scope.body && functionBodyBindsRequire(scope.body))
+        return true;
+      child = scope;
+      continue;
+    }
+    if (t.isCatchClause(scope) && bindsRequireIdentifier([scope.param]))
+      return true;
+    if (t.isSwitchCase(scope) && blockBindsLexicalRequire(scope.consequent))
+      return true;
+    if (
+      t.isForStatement(scope) ||
+      t.isForInStatement(scope) ||
+      t.isForOfStatement(scope)
+    ) {
+      const head = t.isForStatement(scope) ? scope.init : scope.left;
+      if (
+        head !== null &&
+        head !== undefined &&
+        t.isVariableDeclaration(head) &&
+        head.kind !== "var" &&
+        head.declarations.some((declaration) =>
+          bindsRequireIdentifier([declaration.id]),
+        )
+      )
+        return true;
+      child = scope;
+      continue;
+    }
+    if (!t.isBlockStatement(scope) && !t.isStaticBlock(scope)) {
+      child = scope;
+      continue;
+    }
+    if (blockBindsLexicalRequire(scope.body)) return true;
+    child = scope;
+  }
+  return false;
+};
+
+const ITERATION_PROTOTYPES = new Set(["Object", "Array", "String"]);
+
+/**
+ * Whether a member write can affect iteration over fresh literals. A write
+ * through `X.prototype` (or through `__proto__`) mutates shared iteration
+ * behavior: `for-in` then sees inherited keys on `{}`/`[]`, and a replaced
+ * `Symbol.iterator` makes `for-of []` iterate. Reflective mutation
+ * (`defineProperty`, `Reflect`, `setPrototypeOf`) is not covered — see the
+ * residual note on `fileMayPolluteIteration`.
+ */
+const memberWriteTouchesSharedPrototype = (target: t.Node): boolean => {
+  let current: t.Node | null | undefined = target;
+  while (current !== null && current !== undefined) {
+    if (
+      !t.isMemberExpression(current) &&
+      !t.isOptionalMemberExpression(current)
+    )
+      return false;
+    const key = semanticStaticPropertyKey(current.property, current.computed);
+    if (key === "__proto__") return true;
+    const object: t.Node = unwrapJavaScriptExpression(current.object).node;
+    if (
+      t.isIdentifier(object) &&
+      ITERATION_PROTOTYPES.has(object.name) &&
+      key === "prototype"
+    )
+      return true;
+    current = object;
+  }
+  return false;
+};
+
+/**
+ * Whether this file may have mutated shared iteration behavior before any
+ * loop runs. The scan is whole-file and order-insensitive (a later write
+ * still disables the exemption), which is conservative: a polluted file
+ * loses a static-emptiness shortcut it cannot prove. Deletion is excluded —
+ * removing keys or iterators cannot make an empty literal iterate.
+ */
+const fileMayPolluteIteration = (program: t.Program): boolean => {
+  let polluted = false;
+  traverseJavaScriptAst(program, {
+    enter: (node) => {
+      if (polluted) return;
+      if (t.isUnaryExpression(node, { operator: "delete" })) return;
+      const site = semanticWriteSiteTarget(node);
+      if (site === null) return;
+      for (const target of semanticWriteTargets(site)) {
+        if (memberWriteTouchesSharedPrototype(target)) {
+          polluted = true;
+          return;
+        }
+      }
+    },
+  });
+  return polluted;
+};
+
+const isStaticallyEmptyIterable = (
+  node: t.Node | null | undefined,
+  isForIn: boolean,
+): boolean => {
+  // `for-in` skips array holes; `for-of` yields them. Emptiness therefore
+  // depends on the loop kind, never just the literal.
+  if (t.isArrayExpression(node))
+    return isForIn
+      ? node.elements.every((element) => element === null)
+      : node.elements.length === 0;
+  if (t.isObjectExpression(node)) return node.properties.length === 0;
+  if (t.isStringLiteral(node)) return node.value === "";
+  return false;
+};
+
 const hasUninitializedTopLevelVarRequire = (program: t.Program): boolean => {
   let found = false;
   let initialized = false;
+  // Computed once per file: the exemption below infers non-iteration from
+  // literal contents, which holds only while shared prototypes are intact.
+  const mayPollute = fileMayPolluteIteration(program);
   traverseJavaScriptAst(program, {
-    enter: (node, _parent, readAncestors) => {
+    enter: (node, parent, readAncestors) => {
       if (!t.isVariableDeclaration(node, { kind: "var" })) return;
       if (
         readAncestors().some(
@@ -191,6 +450,22 @@ const hasUninitializedTopLevelVarRequire = (program: t.Program): boolean => {
         if (!Object.hasOwn(t.getBindingIdentifiers(declaration.id), "require"))
           continue;
         found = true;
+        // A for-in/of head has no initializer yet assigns the binding on
+        // every iteration, so it initializes the loader just as an
+        // assignment does. A bare `for (var require;;)` head stays
+        // uninitialized, as does a head over a statically empty iterable
+        // that never assigns — unless the file may have mutated shared
+        // iteration behavior, in which case no literal proves emptiness.
+        if (t.isForInStatement(parent) || t.isForOfStatement(parent)) {
+          if (parent.left !== node) continue;
+          initialized ||=
+            mayPollute ||
+            !isStaticallyEmptyIterable(
+              parent.right,
+              t.isForInStatement(parent),
+            );
+          continue;
+        }
         initialized ||= declaration.init !== null;
       }
     },

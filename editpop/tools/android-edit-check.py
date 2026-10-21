@@ -50,8 +50,10 @@ def words(name, region=None, contrast=False):
         original = Image.open(p)
         offset = int(original.height * region[0])
         cropped = original.crop((0, offset, original.width, int(original.height * region[1])))
-        if contrast:
+        if contrast == 'white':
             cropped = ImageOps.grayscale(cropped).point(lambda v: 0 if v > 185 else 255)
+        elif contrast == 'gray':
+            cropped = ImageOps.autocontrast(ImageOps.invert(ImageOps.grayscale(cropped)))
         p = OUT / (name + '-ocr.png')
         cropped.save(p)
     txt = run('tesseract', str(p), 'stdout', '-l', 'spa+eng', '--psm', '11', 'tsv').decode()
@@ -71,11 +73,13 @@ def find(pattern, name, min_y=0, max_y=1):
     rows = words(name)
     w, h = Image.open(OUT / (name + '.png')).size
     found = [r for r in rows if min_y*h <= int(r['top']) <= max_y*h and re.search(pattern, r['text'], re.I)]
-    if not found:
-        # Filmstrip artwork makes whole-screen OCR skip the white caption
-        # on its blue header. A high-contrast crop finds that real caption;
-        # coordinates stay in the original Android screenshot.
-        rows = words(name+'-contrast', region=(min_y, max_y), contrast=True)
+    for style in ['gray', 'white']:
+        if found:
+            break
+        # OCR can skip a filmstrip caption or a gray search placeholder.
+        # Keep the real screenshot coordinates; never substitute an edit.
+        end = min(max_y, .70) if pattern == 'Buscar' else max_y
+        rows = words(name+'-'+style, region=(min_y, end), contrast=style)
         found = [r for r in rows if re.search(pattern, r['text'], re.I)]
     if not found:
         raise AssertionError(f'{name}: label {pattern!r} absent; text={[r["text"] for r in rows]}')
@@ -87,6 +91,7 @@ def click_label(pattern, name, **kw):
     x, y = find(pattern, name, **kw)
     LOG.append({'tap': pattern, 'x': x, 'y': y})
     tap(x, y)
+    return x, y
 
 
 def toolbar(pattern, name):
@@ -133,13 +138,20 @@ class Rpc:
 
     def call(self, method, **params):
         self.n += 1
+        call_deadline = time.monotonic() + 60
+        with (OUT/'rpc-events.jsonl').open('a') as trail:
+            trail.write(json.dumps({'phase':'request','id':self.n,'method':method})+'\n')
         self.f.write((json.dumps({'jsonrpc':'2.0', 'id':self.n, 'method':method, 'params':params})+'\n').encode())
         self.f.flush()
         while True:
+            if time.monotonic() >= call_deadline:
+                raise TimeoutError(f'API did not reply within 60s: {method}')
             line = self.f.readline()
             if not line:
                 raise AssertionError('API connection closed')
             result = json.loads(line)
+            with (OUT/'rpc-events.jsonl').open('a') as trail:
+                trail.write(json.dumps({'phase':'received','id':result.get('id'),'method':result.get('method'),'error':result.get('error'),'params':result.get('params')})+'\n')
             if result.get('id') == self.n:
                 assert 'error' not in result, result
                 return result['result']
@@ -205,14 +217,14 @@ def main():
     assert abs(sum(c['duration'] for c in clips)-4) < .04
     right_id = clips[1]['id']
     toolbar('Efect', '05-effects')
-    click_label('Buscar', '06-effect-search', min_y=.4)
+    _, effect_search_y = click_label('Buscar', '06-effect-search', min_y=.4)
     shell('input', 'text', 'Pixelate')
     shell('input', 'keyevent', '4')
     time.sleep(1)
     # Search text itself is above the cards; choose the lower match.
-    rows = words('07-effect-results')
-    matches = [r for r in rows if re.search('pixel', r['text'], re.I)]
-    assert len(matches) >= 2, 'Search result card not rendered'
+    rows = words('07-effect-results', region=(.4, .95), contrast='gray')
+    matches = [r for r in rows if re.search('pixel', r['text'], re.I) and int(r['top']) > effect_search_y + 50]
+    assert matches, 'Search result card not rendered'
     r = max(matches, key=lambda r:int(r['top']))
     tap(int(r['left'])+int(r['width'])/2, int(r['top'])+int(r['height'])/2-30)
     d = document('08-effect', lambda d:any(c['id']==right_id and any(e['id']=='concat.pixelate' for e in c.get('videoEffects',[])) for c in d.get('clips',[])))
@@ -220,13 +232,23 @@ def main():
     w, h = Image.open(OUT/'09-effect-applied.png').size
     tap(w*.5, h*.2)  # dismiss sheet
     toolbar('Trans', '10-transitions')
-    click_label('Buscar', '11-transition-search', min_y=.4)
-    shell('input','text','Dissolve')
+    try:
+        _, transition_search_y = click_label('Buscar', '11-transition-search', min_y=.4)
+    except AssertionError:
+        # The gray placeholder can be dropped by OCR even in a crop. On
+        # this fixed API30/Pixel6 profile, the search field is one header
+        # below the recognized sheet title; touch that real field. The
+        # following result and project assertions still require the UI edit.
+        _, title_y = find('Transiciones', '11-transition-title', min_y=.4, max_y=.55)
+        transition_search_y = title_y + w*.125
+        LOG.append({'tap':'transition search below sheet title','x':w*.25,'y':transition_search_y})
+        tap(w*.25, transition_search_y)
+    shell('input','text','soft%scross-dissolve')
     shell('input','keyevent','4')
     time.sleep(1)
-    rows = words('12-transition-results')
-    matches = [r for r in rows if re.search('dissolve', r['text'], re.I)]
-    assert len(matches) >= 2, 'Transition result card not rendered'
+    rows = words('12-transition-results', region=(.4, .95), contrast='gray')
+    matches = [r for r in rows if re.search('dissolve', r['text'], re.I) and int(r['top']) > transition_search_y + 50]
+    assert matches, 'Transition result card not rendered'
     r = max(matches, key=lambda r:int(r['top']))
     tap(int(r['left'])+int(r['width'])/2, int(r['top'])+int(r['height'])/2-30)
     d = document('13-transition', lambda d:any(c['id']==right_id and (c.get('transitionIn') or {}).get('id')=='concat.dissolve' for c in d.get('clips',[])))
@@ -246,15 +268,17 @@ def main():
     rpc = Rpc()
     rpc.call('project.open', path=PROJECT)
     result = rpc.call('export.run', path=PROJECT, output=PROJECT+'/ui-result.mp4', width=1920,height=1080, preset='ultrafast')
+    (OUT/'18-export-started.json').write_text(json.dumps(result,indent=2))
     deadline = time.monotonic()+300
     while time.monotonic()<deadline:
         state = rpc.call('export.status', job=result['job'])
+        (OUT/'19-export-status.json').write_text(json.dumps(state,indent=2))
         if state['state'] != 'running':
             assert state['state']=='done', state
             break
         time.sleep(2)
     else:
-        raise AssertionError('Export did not complete within 300s')
+        raise AssertionError(f'Export did not complete within 300s: {state}')
     # Prove that the renderer actually uses these properties. Render a
     # control with only the effect removed, and one with only the transition
     # removed. The UI-produced document itself is never modified by these
@@ -317,5 +341,14 @@ except Exception:
     raise
 finally:
     (OUT/'actions.json').write_text(json.dumps(LOG,indent=2))
+    # Capture stalled native threads before the runner shuts down the emulator.
+    pid = shell('pidof', PKG).split()
+    if pid:
+        for label, command in [('threads', ['adb','shell','ps','-T','-p',pid[0]]), ('native-stack', ['adb','shell','debuggerd','-b',pid[0]]), ('export-files', ['adb','shell','ls','-lR',PROJECT])]:
+            try:
+                result = sp.run(command, stdout=sp.PIPE, stderr=sp.STDOUT, timeout=25)
+                (OUT/(label+'.txt')).write_bytes(result.stdout)
+            except sp.TimeoutExpired as error:
+                (OUT/(label+'.txt')).write_bytes(error.stdout or b'timeout')
     (OUT/'logcat.txt').write_bytes(run('adb','logcat','-d','-v','threadtime',check=False))
     run('adb','forward','--remove','tcp:7420',check=False)

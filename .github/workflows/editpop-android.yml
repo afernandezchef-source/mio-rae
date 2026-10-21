@@ -80,7 +80,7 @@ jobs:
         with:
           workspaces: src
           cache-workspace-crates: true
-          key: editpop-android-arm64
+          key: editpop-android-arm64-workspace-r2
       - name: Create temporary test signing key
         run: |
           keytool -genkeypair -keystore "$RUNNER_TEMP/editpop-test.jks" -storepass android -keypass android -alias editpop -keyalg RSA -keysize 2048 -validity 365 -dname 'CN=EditPop Test'

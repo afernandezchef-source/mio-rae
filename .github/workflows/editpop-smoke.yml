@@ -70,7 +70,7 @@ jobs:
         with:
           workspaces: src
           cache-workspace-crates: true
-          key: editpop-android-x86_64
+          key: editpop-android-x86_64-workspace-r2
           cache-on-failure: true
       - name: Temporary test key
         run: |

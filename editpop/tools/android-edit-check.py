@@ -19,6 +19,7 @@ from pathlib import Path
 from PIL import Image
 
 PKG = 'cl.kokumix.editpop.concatcandidate'
+TEST_TOKEN = 'editpop-ci-only-loopback-token-0123456789abcdef'
 OUT = Path(sys.argv[1] if len(sys.argv) > 1 else 'android-edit-check')
 OUT.mkdir(parents=True, exist_ok=True)
 ROOT = f'/data/user/0/{PKG}/files'
@@ -109,7 +110,7 @@ class Rpc:
                 time.sleep(.5)
         self.f = self.s.makefile('rwb')
         self.n = 0
-        self.call('auth', token='')
+        self.call('auth', token=TEST_TOKEN)
 
     def call(self, method, **params):
         self.n += 1
@@ -143,7 +144,7 @@ def main():
     shell('am', 'force-stop', PKG)
     config = ROOT + '/app.concat.editor'
     shell('mkdir', '-p', config, WORK)
-    prefs = {'locale':'es', 'accent':'coral', 'server':{'enabled':True,'listen':'127.0.0.1:7420','token':''}}
+    prefs = {'locale':'es', 'accent':'coral', 'server':{'enabled':True,'listen':'127.0.0.1:7420','token':TEST_TOKEN}}
     run('adb', 'shell', f'cat > {shlex.quote(config+"/settings.json")}', data=json.dumps(prefs).encode())
     fixture = OUT / 'ClipTest.mp4'
     run('ffmpeg', '-y', '-v', 'error', '-f', 'lavfi', '-i', 'testsrc2=s=320x180:r=30:d=4', '-f', 'lavfi', '-i', 'sine=frequency=440:sample_rate=48000:duration=4', '-c:v', 'libx264', '-pix_fmt', 'yuv420p', '-c:a', 'aac', '-shortest', str(fixture))

@@ -23,6 +23,7 @@
 
 pub mod commands;
 pub mod doc;
+pub mod edit_targets;
 pub mod editor;
 pub mod model;
 pub mod placement;

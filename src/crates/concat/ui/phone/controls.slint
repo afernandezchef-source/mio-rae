@@ -31,6 +31,8 @@ export component RoundButton inherits Rectangle {
     in property <bool> repeats;
 
     callback clicked();
+    accessible-role: button;
+    accessible-label: root.label;
 
     width: root.size;
     height: root.size;
@@ -89,6 +91,8 @@ export component ToolItem inherits Rectangle {
     in property <bool> current;
 
     callback clicked();
+    accessible-role: button;
+    accessible-label: root.label;
 
     width: 68px;
     border-radius: Theme.r;

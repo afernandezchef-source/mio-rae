@@ -166,7 +166,7 @@ def main():
     rpc.call('project.close', path=PROJECT, save=True)
     rpc.close()
     restart()
-    click_label('PruebaUI', '01-home')
+    click_label('Prueba', '01-home')
     time.sleep(3)
     # A real body tap places the playhead inside the clip. Its header is
     # found on screen, not by an internal callback or edit command.
@@ -216,7 +216,7 @@ def main():
     tap(w*.5, h*.2)
     shot('14-finished-editor')
     restart()
-    click_label('PruebaUI','15-reopen')
+    click_label('Prueba','15-reopen')
     time.sleep(3)
     shot('16-reopened-editor')
     reopened = document('17-reopened', lambda d:len(d.get('clips',[]))==2)

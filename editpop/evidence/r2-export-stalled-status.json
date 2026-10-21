@@ -1,0 +1,10 @@
+{
+  "fraction": 0.0,
+  "frame": 0,
+  "job": "j1",
+  "output": "/sdcard/Android/data/cl.kokumix.editpop.concatcandidate/files/checks/PruebaUI/ui-result.mp4",
+  "path": "/sdcard/Android/data/cl.kokumix.editpop.concatcandidate/files/checks/PruebaUI",
+  "stage": "rendering",
+  "state": "running",
+  "total": 120
+}

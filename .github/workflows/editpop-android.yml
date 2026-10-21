@@ -80,6 +80,7 @@ jobs:
         with:
           workspaces: src
           cache-workspace-crates: true
+          cache-on-failure: true
           key: editpop-android-arm64-workspace-r2
       - name: Create temporary test signing key
         run: |

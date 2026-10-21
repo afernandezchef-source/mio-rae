@@ -638,7 +638,17 @@ fn open_video(
             (*context).thread_count = i32::from(options.threads);
         }
     }
-    if global_header {
+    // MediaCodec's synchronous H.264/HEVC wrapper obtains GLOBAL_HEADER
+    // by encoding a dummy frame, sending EOS and flushing the live encoder.
+    // Android does not define encoder flush behaviour: on API30's encoder
+    // this left dequeueInputBuffer blocked after the first real frame
+    // (captured native stack in the Android editing regression). Keep these
+    // codecs' parameter sets inline instead. FFmpeg's MP4 muxer takes its
+    // avcC/hvcC from the first packet, without flushing the platform codec.
+    // Other encoder families and AV1 retain their global-header contract.
+    let inline_headers = family == Family::MediaCodec
+        && matches!(options.codec, VideoCodec::H264 | VideoCodec::Hevc);
+    if global_header && !inline_headers {
         video.set_flags(ffmpeg::codec::Flags::GLOBAL_HEADER);
     }
     if pq {

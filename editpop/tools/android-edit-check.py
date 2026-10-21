@@ -21,7 +21,8 @@ PKG = 'cl.kokumix.editpop.concatcandidate'
 OUT = Path(sys.argv[1] if len(sys.argv) > 1 else 'android-edit-check')
 OUT.mkdir(parents=True, exist_ok=True)
 ROOT = f'/data/user/0/{PKG}/files'
-PROJECT = ROOT + '/checks/PruebaUI'
+WORK = f'/sdcard/Android/data/{PKG}/files/checks'
+PROJECT = WORK + '/PruebaUI'
 LOG = []
 
 
@@ -131,20 +132,20 @@ def main():
     assert shell('id').startswith('uid=0'), 'Rooted test emulator required; never modifies a real phone'
     shell('am', 'force-stop', PKG)
     config = ROOT + '/app.concat.editor'
-    shell('mkdir', '-p', config, ROOT + '/checks')
+    shell('mkdir', '-p', config, WORK)
     prefs = {'locale':'es', 'accent':'coral', 'server':{'enabled':True,'listen':'127.0.0.1:7420','token':''}}
     run('adb', 'shell', f'cat > {shlex.quote(config+"/settings.json")}', data=json.dumps(prefs).encode())
     fixture = OUT / 'ClipTest.mp4'
     run('ffmpeg', '-y', '-v', 'error', '-f', 'lavfi', '-i', 'testsrc2=s=320x180:r=30:d=4', '-f', 'lavfi', '-i', 'sine=frequency=440:sample_rate=48000:duration=4', '-c:v', 'libx264', '-pix_fmt', 'yuv420p', '-c:a', 'aac', '-shortest', str(fixture))
-    run('adb', 'push', str(fixture), ROOT + '/checks/ClipTest.mp4')
+    run('adb', 'push', str(fixture), WORK + '/ClipTest.mp4')
     # Root-written files must belong to the application before it writes recents/settings.
     uid = shell('stat', '-c', '%u', ROOT)
-    shell('chown', '-R', f'{uid}:{uid}', config, ROOT + '/checks')
+    shell('chown', '-R', f'{uid}:{uid}', config)
     restart()
     run('adb', 'forward', 'tcp:7420', 'tcp:7420')
     rpc = Rpc()
-    rpc.call('project.create', location=ROOT+'/checks', name='PruebaUI', video={'width':320,'height':180,'rateNum':30,'rateDen':1})
-    imported = rpc.call('media.import', path=PROJECT, file=ROOT+'/checks/ClipTest.mp4')
+    rpc.call('project.create', location=WORK, name='PruebaUI', video={'width':320,'height':180,'rateNum':30,'rateDen':1})
+    imported = rpc.call('media.import', path=PROJECT, file=WORK+'/ClipTest.mp4')
     project = imported['project']
     timeline = project['timelines'][0]
     rpc.call('edit.apply', path=PROJECT, command={'op':'addClip','mediaId':project['media'][0]['id'],'trackId':timeline['tracks'][0]['id'],'start':0,'ripple':False})

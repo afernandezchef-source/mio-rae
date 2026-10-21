@@ -706,6 +706,28 @@ export component PhoneEditor inherits Rectangle {
             self.stack-h - Math.max(0px, lanes.height - lanes.ruler-height));
         property <length> at: Math.max(0px, Math.min(self.overflow, self.track-scroll));
 
+        // Imports and splits must keep their selected lane visible. Four
+        // desktop-height starter lanes otherwise put the main clip below
+        // the phone viewport, despite its tools saying it was selected.
+        property <string> selected-id: Editor.selected-clip.id;
+        property <float> selected-top: Editor.selection-lane-top;
+        property <float> selected-height: Editor.selection-lane-height;
+        changed selected-id => { self.reveal-selection(); }
+        changed selected-top => { self.reveal-selection(); }
+        changed selected-height => { self.reveal-selection(); }
+        function reveal-selection() {
+            if (root.has-clip && self.selected-top >= 0) {
+                let top = self.selected-top * 1px;
+                let bottom = top + self.selected-height * 1px;
+                let viewport = Math.max(0px, self.height - 24px);
+                if (top < self.at) {
+                    self.track-scroll = top;
+                } else if (bottom > self.at + viewport) {
+                    self.track-scroll = bottom - viewport;
+                }
+            }
+        }
+
         Rectangle {
             x: 8px;
             y: 0;
@@ -943,6 +965,18 @@ export component PhoneEditor inherits Rectangle {
                 label: I18n.t("phone.split");
                 clicked => { Editor.shortcut("split-selected"); }
             }
+            if root.is-picture: ToolItem {
+                glyph: Glyph.transition;
+                label: I18n.t("mediaPane.transitions");
+                current: root.sheet == "transitions";
+                clicked => { root.show("transitions", true); }
+            }
+            if root.is-picture || root.is-text: ToolItem {
+                glyph: Glyph.sparkle;
+                label: I18n.t("common.effects");
+                current: root.sheet == "clip-effects";
+                clicked => { root.show("clip-effects", true); }
+            }
             ToolItem {
                 glyph: Glyph.trash;
                 label: I18n.t("common.delete");
@@ -1027,18 +1061,6 @@ export component PhoneEditor inherits Rectangle {
                 label: I18n.t("common.enhance");
                 current: root.sheet == "clip-enhance";
                 clicked => { root.show("clip-enhance", true); }
-            }
-            if root.is-picture || root.is-text: ToolItem {
-                glyph: Glyph.sparkle;
-                label: I18n.t("common.effects");
-                current: root.sheet == "clip-effects";
-                clicked => { root.show("clip-effects", true); }
-            }
-            if root.is-picture: ToolItem {
-                glyph: Glyph.transition;
-                label: I18n.t("mediaPane.transitions");
-                current: root.sheet == "transitions";
-                clicked => { root.show("transitions", true); }
             }
             ToolItem {
                 glyph: Glyph.copy;

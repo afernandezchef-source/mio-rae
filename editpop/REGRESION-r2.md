@@ -6,23 +6,38 @@ esos resultados no cubrían edición. Esta corrección mantiene Concat como moto
 
 | Problema identificado en código | Cambio | Verificación actual |
 | --- | --- | --- |
-| Tocar un clip en teléfono sólo seleccionaba, dejaba el cabezal en cero; dividir en un extremo era un no-op silencioso. | El tap posiciona el cabezal; una división inválida explica que debe situarse dentro; se selecciona el ID de la cola realmente creada. | Pruebas del modelo aprobadas; pulsaciones Android pendientes. |
-| Una transición aplicada al primer segmento exigía seleccionar su vecino de entrada. | En teléfono cualquiera de los dos lados de una unión válida resuelve al clip de entrada; no se inventan uniones sobre huecos ni entre pistas. | Casos de adyacencia, hueco, audio y pistas distintas aprobados. |
-| Las cuatro pistas de escritorio de 80 px podían dejar el vídeo seleccionado debajo del visor de pistas de teléfono. | La geometría de la pista seleccionada se publica y el teléfono la desplaza a la vista al cambiar de selección/geometría. | Compilación y prueba Android pendientes. |
-| Transiciones y efectos del clip estaban al final de una barra extensa. | Se colocan junto a Dividir. Nombres accesibles en controles de teléfono. | Prueba Android pendiente. |
-| El estante inicial de efectos mostraba sólo el primer grupo. | Las bibliotecas de teléfono arrancan mostrando todos los grupos. Al aplicar a un clip fuera del cabezal se busca su interior y se confirma la operación. | Prueba de aplicación y renderizado Android pendiente. |
+| Tocar un clip en teléfono sólo seleccionaba, dejaba el cabezal en cero; dividir en un extremo era un no-op silencioso. | El tap posiciona el cabezal; una división inválida explica que debe situarse dentro; se selecciona el ID de la cola realmente creada. | Modelo y pulsaciones reales Android API30 aprobados; dos segmentos y mapeo de origen correctos. |
+| Una transición aplicada al primer segmento exigía seleccionar su vecino de entrada. | En teléfono cualquiera de los dos lados de una unión válida resuelve al clip de entrada; no se inventan uniones sobre huecos ni entre pistas. | Casos del modelo aprobados; Dissolve aplicado mediante pulsaciones y conservado al reabrir. |
+| Las cuatro pistas de escritorio de 80 px podían dejar el vídeo seleccionado debajo del visor de pistas de teléfono. | La geometría de la pista seleccionada se publica y el teléfono la desplaza a la vista al cambiar de selección/geometría. | Compilación ARM/x86 aprobada; clip visible al reabrir, incluidas pistas vacías compactas. |
+| Transiciones y efectos del clip estaban al final de una barra extensa. | Se colocan junto a Dividir. Nombres accesibles en controles de teléfono. | Acceso a ambos paneles y aplicación mediante pulsaciones Android comprobados. |
+| El estante inicial de efectos mostraba sólo el primer grupo. | Las bibliotecas de teléfono arrancan mostrando todos los grupos. Al aplicar a un clip fuera del cabezal se busca su interior y se confirma la operación. | Pixelate aplicado mediante pulsaciones, visible en el monitor y conservado al reabrir. Comparación de exportación pendiente. |
 
 165 pruebas concat-project aprobadas, sin fallos. Incluyen división, transición,
 efecto, deshacer/rehacer y serialización/reapertura, además de las regresiones
 originales. Registro: evidence/r2-project-tests.log. No equivalen a prueba de UI.
 
-Fuentes en compilación externa:
-- ARM64: 0cc3aea805bccb612aa1581cc123775f314860c2, run 39644578870.
-- x86_64: 48480fcb4ed245d95f62edb1a47fd8c23bf43fb6, run 39644578816.
-Ambos commits tienen el mismo árbol fuente. El archivo de pruebas puede mejorar
-en un commit separado sin cambiar la app compilada: se registra siempre el run,
-commit y SHA-256 del APK que se ejecutó. No distribuir una corrección como
-verificada antes de terminar los pasos que constan pendientes.
+Fuentes compiladas y firmadas, aún sin publicar actualización:
+- ARM64: 71437d54c0e9a943fa20eeb703d46a32cbfe54e0, run39678071346.
+- x86_64: f32fc27e375b513dd6f459887710fc8cfe1564b6, run39678071674.
+Ambos commits tienen el mismo árbol fuente. Las pruebas posteriores sólo
+modifican el script y workflow, no la aplicación compilada.
+
+**Bloqueo abierto:** los runs39680426318 y39680600905 completaron división,
+efecto, transición, guardado y reapertura, pero la exportación de cuatro segundos
+a1080p no terminó en300segundos en SwiftShader. No se declara exportación
+verificada ni se atribuye el problema al rendimiento del Samsung. El run39682305653
+confirmó frame0/120 y la espera dentro de MediaCodec::dequeueInputBuffer,
+llamado desde avcodec_send_frame. El renderizador sí terminó el primer frame.
+Evidencia: evidence/r2-export-stalled-native-stack.txt y status.json.
+
+Se cambió la inicialización H.264/HEVC MediaCodec para mantener SPS/PPS/VPS en
+el primer paquete, que el muxer MP4 de FFmpeg sabe leer. Evita el procedimiento
+GLOBAL_HEADER del wrapper (frame ficticio, EOS y flush del codificador). Android
+no define flush para codificadores; la espera capturada estaba dentro del NDK,
+por lo que la paciencia de10s del bucle Rust no podía interrumpirla. El check
+ARM64 pasa. La corrección requiere nueva compilación y prueba Android; aún no
+se declara resuelta ni se ha probado HEVC. El diálogo de
+exportación y las tareas en segundo plano tampoco están certificados.
 
 El protocolo editpop/tools/android-edit-check.py usa un emulador de pruebas con
 adb root y un vídeo sintético. La API de automatización existente se habilita

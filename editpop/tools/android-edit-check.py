@@ -9,6 +9,7 @@ import csv
 import io
 import copy
 import json
+import os
 import re
 import shlex
 import socket
@@ -168,7 +169,41 @@ def restart():
     time.sleep(4)
 
 
+
+def ui_export_check():
+    """Real Export buttons and MediaStore publication on a fresh emulator."""
+    click_label('Exportar', 'ui-export-open', max_y=.2)
+    time.sleep(2)
+    click_label('Exportar', 'ui-export-start', min_y=.65)
+    until = time.monotonic()+180
+    row = None
+    while time.monotonic()<until:
+        listing = shell('content','query','--uri','content://media/external/video/media',
+                        '--projection','_id:_display_name:relative_path:is_pending:_data:_size')
+        (OUT/'ui-export-mediastore.txt').write_text(listing)
+        rows = [line for line in listing.splitlines() if 'Movies/EditPop/' in line and 'is_pending=0' in line]
+        if rows:
+            row = rows[-1]
+            break
+        time.sleep(2)
+    assert row, 'Export button did not publish a completed video to Movies/EditPop within180s'
+    match = re.search(r'_data=(.*?)(?:, |$)', row)
+    assert match and match[1].startswith('/storage/emulated/0/Movies/EditPop/'), row
+    exported = OUT/'ui-gallery-result.mp4'
+    run('adb','pull',match[1],str(exported))
+    probe = json.loads(run('ffprobe','-v','error','-show_streams','-show_format','-of','json',str(exported)))
+    (OUT/'ui-export-probe.json').write_text(json.dumps(probe,indent=2))
+    video = next(stream for stream in probe['streams'] if stream['codec_type']=='video')
+    assert (video['width'],video['height'])==(1920,1080),probe
+    assert abs(float(probe['format']['duration'])-4)<.1,probe
+    assert any(stream['codec_type']=='audio' for stream in probe['streams']),probe
+    run('ffmpeg','-xerror','-v','error','-i',str(exported),'-f','null','-')
+    shot('ui-export-published')
+    (OUT/'PASS-ui-export.json').write_text(json.dumps({'result':'PASS','scope':'Real UI Export buttons, H264/AAC1080p and completed MediaStore publication; one synthetic clip; no Samsung test','actions':LOG},indent=2))
+
+
 def main():
+    assert shell('getprop','ro.kernel.qemu') == '1', 'This script is for test emulators, not physical phones'
     run('adb', 'root')
     run('adb', 'wait-for-device')
     assert shell('id').startswith('uid=0'), 'Rooted test emulator required; never modifies a real phone'
@@ -187,7 +222,10 @@ def main():
     restart()
     run('adb', 'forward', 'tcp:7420', 'tcp:7420')
     rpc = Rpc()
-    rpc.call('project.create', location=WORK, name='PruebaUI', video={'width':320,'height':180,'rateNum':30,'rateDen':1})
+    scenario = os.environ.get('EDITPOP_TEST_SCENARIO','full')
+    assert scenario in ('full','ui-export'), scenario
+    width,height = (1920,1080) if scenario=='ui-export' else (320,180)
+    rpc.call('project.create', location=WORK, name='PruebaUI', video={'width':width,'height':height,'rateNum':30,'rateDen':1})
     imported = rpc.call('media.import', path=PROJECT, file=FIXTURE)
     project = imported['project']
     timeline = project['timelines'][0]
@@ -198,6 +236,9 @@ def main():
     restart()
     click_label('Prueba', '01-home')
     time.sleep(3)
+    if scenario=='ui-export':
+        ui_export_check()
+        return
     # A real body tap places the playhead inside the clip. Its header is
     # found on screen, not by an internal callback or edit command.
     for attempt in range(4):
@@ -317,7 +358,7 @@ def main():
     assert (video['width'],video['height'])==(1920,1080)
     assert abs(float(probe['format']['duration'])-4)<.1
     assert any(s['codec_type']=='audio' for s in probe['streams'])
-    run('ffmpeg','-v','error','-i',str(OUT/'ui-result.mp4'),'-f','null','-')
+    run('ffmpeg','-xerror','-v','error','-i',str(OUT/'ui-result.mp4'),'-f','null','-')
     from PIL import ImageChops, ImageStat
     scores = {}
     for label, at in [('effect', effect_at), ('transition', transition_at)]:
@@ -344,7 +385,7 @@ finally:
     # Capture stalled native threads before the runner shuts down the emulator.
     pid = shell('pidof', PKG).split()
     if pid:
-        for label, command in [('threads', ['adb','shell','ps','-T','-p',pid[0]]), ('native-stack', ['adb','shell','debuggerd','-b',pid[0]]), ('export-files', ['adb','shell','ls','-lR',PROJECT])]:
+        for label, command in [('threads', ['adb','shell','ps','-T','-p',pid[0]]), ('native-stack', ['adb','shell','debuggerd','-b',pid[0]]), ('export-files', ['adb','shell','ls','-laR',PROJECT])]:
             try:
                 result = sp.run(command, stdout=sp.PIPE, stderr=sp.STDOUT, timeout=25)
                 (OUT/(label+'.txt')).write_bytes(result.stdout)

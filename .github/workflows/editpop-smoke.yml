@@ -70,8 +70,8 @@ jobs:
         with:
           workspaces: src
           cache-workspace-crates: true
-          key: editpop-android-x86_64-workspace-r2
           cache-on-failure: true
+          key: editpop-android-x86_64-workspace-r2
       - name: Temporary test key
         run: |
           keytool -genkeypair -keystore "$RUNNER_TEMP/editpop-test.jks" -storepass android -keypass android -alias editpop -keyalg RSA -keysize 2048 -validity 365 -dname 'CN=EditPop Test'
@@ -105,7 +105,7 @@ jobs:
           disable-animations: true
           script: |
             scripts/ci/smoke-android.sh --package cl.kokumix.editpop.concatcandidate --out smoke-android --wait 15 src/target/quick/apk/EditPop-Concat-Candidate.apk
-            python3 editpop/tools/android-edit-check.py android-edit-check
+            timeout --kill-after=15s 900s python3 editpop/tools/android-edit-check.py android-edit-check
       - name: Preserve startup evidence
         if: always()
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9

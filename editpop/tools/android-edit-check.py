@@ -172,9 +172,31 @@ def restart():
 
 def ui_export_check():
     """Real Export buttons and MediaStore publication on a fresh emulator."""
-    click_label('Exportar', 'ui-export-open', max_y=.2)
+    def export_tap(name, header):
+        try:
+            click_label('Exportar', name, **({'max_y':.2} if header else {'min_y':.65}))
+            return
+        except AssertionError:
+            # Tesseract treats the rounded lime button as a graphic. Read
+            # its interior alone, then tap the actual visible button.
+            im = Image.open(OUT/(name+'.png')).convert('RGB')
+            w,h = im.size
+            left,top,right,bottom = (int(w*.65),int(h*.025),w,int(h*.09)) if header else (0,int(h*.8),w,int(h*.97))
+            region = im.crop((left,top,right,bottom))
+            mask = Image.new('L',region.size)
+            mask.putdata([255 if r>150 and g>170 and b<150 else 0 for r,g,b in region.getdata()])
+            box = mask.getbbox()
+            assert box, f'{name}: no visible export button'
+            x0,y0,x1,y1 = box; bw,bh=x1-x0,y1-y0
+            word = region.crop((x0+int(bw*.28),y0+int(bh*.18),x1-int(bw*.06),y1-int(bh*.18))).convert('L').point(lambda v:255 if v>100 else 0)
+            target = OUT/(name+'-button.png');word.resize((word.width*3,word.height*3)).save(target)
+            label = run('tesseract',str(target),'stdout','-l','spa+eng','--psm','7').decode()
+            assert re.search('Exportar',label,re.I), f'{name}: {label!r}'
+            LOG.append({'tap':'Exportar from visible button OCR','x':left+(x0+x1)/2,'y':top+(y0+y1)/2})
+            tap(left+(x0+x1)/2,top+(y0+y1)/2)
+    export_tap('ui-export-open', True)
     time.sleep(2)
-    click_label('Exportar', 'ui-export-start', min_y=.65)
+    export_tap('ui-export-start', False)
     until = time.monotonic()+180
     row = None
     while time.monotonic()<until:

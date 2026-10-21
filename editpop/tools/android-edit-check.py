@@ -138,13 +138,20 @@ class Rpc:
 
     def call(self, method, **params):
         self.n += 1
+        call_deadline = time.monotonic() + 60
+        with (OUT/'rpc-events.jsonl').open('a') as trail:
+            trail.write(json.dumps({'phase':'request','id':self.n,'method':method})+'\n')
         self.f.write((json.dumps({'jsonrpc':'2.0', 'id':self.n, 'method':method, 'params':params})+'\n').encode())
         self.f.flush()
         while True:
+            if time.monotonic() >= call_deadline:
+                raise TimeoutError(f'API did not reply within 60s: {method}')
             line = self.f.readline()
             if not line:
                 raise AssertionError('API connection closed')
             result = json.loads(line)
+            with (OUT/'rpc-events.jsonl').open('a') as trail:
+                trail.write(json.dumps({'phase':'received','id':result.get('id'),'method':result.get('method'),'error':result.get('error'),'params':result.get('params')})+'\n')
             if result.get('id') == self.n:
                 assert 'error' not in result, result
                 return result['result']
@@ -261,15 +268,17 @@ def main():
     rpc = Rpc()
     rpc.call('project.open', path=PROJECT)
     result = rpc.call('export.run', path=PROJECT, output=PROJECT+'/ui-result.mp4', width=1920,height=1080, preset='ultrafast')
+    (OUT/'18-export-started.json').write_text(json.dumps(result,indent=2))
     deadline = time.monotonic()+300
     while time.monotonic()<deadline:
         state = rpc.call('export.status', job=result['job'])
+        (OUT/'19-export-status.json').write_text(json.dumps(state,indent=2))
         if state['state'] != 'running':
             assert state['state']=='done', state
             break
         time.sleep(2)
     else:
-        raise AssertionError('Export did not complete within 300s')
+        raise AssertionError(f'Export did not complete within 300s: {state}')
     # Prove that the renderer actually uses these properties. Render a
     # control with only the effect removed, and one with only the transition
     # removed. The UI-produced document itself is never modified by these
@@ -332,5 +341,14 @@ except Exception:
     raise
 finally:
     (OUT/'actions.json').write_text(json.dumps(LOG,indent=2))
+    # Capture stalled native threads before the runner shuts down the emulator.
+    pid = shell('pidof', PKG).split()
+    if pid:
+        for label, command in [('threads', ['adb','shell','ps','-T','-p',pid[0]]), ('native-stack', ['adb','shell','debuggerd','-b',pid[0]]), ('export-files', ['adb','shell','ls','-lR',PROJECT])]:
+            try:
+                result = sp.run(command, stdout=sp.PIPE, stderr=sp.STDOUT, timeout=25)
+                (OUT/(label+'.txt')).write_bytes(result.stdout)
+            except sp.TimeoutExpired as error:
+                (OUT/(label+'.txt')).write_bytes(error.stdout or b'timeout')
     (OUT/'logcat.txt').write_bytes(run('adb','logcat','-d','-v','threadtime',check=False))
     run('adb','forward','--remove','tcp:7420',check=False)

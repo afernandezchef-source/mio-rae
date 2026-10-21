@@ -91,6 +91,7 @@ def click_label(pattern, name, **kw):
     x, y = find(pattern, name, **kw)
     LOG.append({'tap': pattern, 'x': x, 'y': y})
     tap(x, y)
+    return x, y
 
 
 def toolbar(pattern, name):
@@ -209,14 +210,14 @@ def main():
     assert abs(sum(c['duration'] for c in clips)-4) < .04
     right_id = clips[1]['id']
     toolbar('Efect', '05-effects')
-    click_label('Buscar', '06-effect-search', min_y=.4)
+    _, effect_search_y = click_label('Buscar', '06-effect-search', min_y=.4)
     shell('input', 'text', 'Pixelate')
     shell('input', 'keyevent', '4')
     time.sleep(1)
     # Search text itself is above the cards; choose the lower match.
     rows = words('07-effect-results', region=(.4, .95), contrast='gray')
-    matches = [r for r in rows if re.search('pixel', r['text'], re.I)]
-    assert len(matches) >= 2, 'Search result card not rendered'
+    matches = [r for r in rows if re.search('pixel', r['text'], re.I) and int(r['top']) > effect_search_y + 50]
+    assert matches, 'Search result card not rendered'
     r = max(matches, key=lambda r:int(r['top']))
     tap(int(r['left'])+int(r['width'])/2, int(r['top'])+int(r['height'])/2-30)
     d = document('08-effect', lambda d:any(c['id']==right_id and any(e['id']=='concat.pixelate' for e in c.get('videoEffects',[])) for c in d.get('clips',[])))
@@ -224,13 +225,13 @@ def main():
     w, h = Image.open(OUT/'09-effect-applied.png').size
     tap(w*.5, h*.2)  # dismiss sheet
     toolbar('Trans', '10-transitions')
-    click_label('Buscar', '11-transition-search', min_y=.4)
-    shell('input','text','Dissolve')
+    _, transition_search_y = click_label('Buscar', '11-transition-search', min_y=.4)
+    shell('input','text','soft%scross-dissolve')
     shell('input','keyevent','4')
     time.sleep(1)
     rows = words('12-transition-results', region=(.4, .95), contrast='gray')
-    matches = [r for r in rows if re.search('dissolve', r['text'], re.I)]
-    assert len(matches) >= 2, 'Transition result card not rendered'
+    matches = [r for r in rows if re.search('dissolve', r['text'], re.I) and int(r['top']) > transition_search_y + 50]
+    assert matches, 'Transition result card not rendered'
     r = max(matches, key=lambda r:int(r['top']))
     tap(int(r['left'])+int(r['width'])/2, int(r['top'])+int(r['height'])/2-30)
     d = document('13-transition', lambda d:any(c['id']==right_id and (c.get('transitionIn') or {}).get('id')=='concat.dissolve' for c in d.get('clips',[])))

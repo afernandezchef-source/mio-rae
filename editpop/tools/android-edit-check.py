@@ -25,6 +25,7 @@ OUT.mkdir(parents=True, exist_ok=True)
 ROOT = f'/data/user/0/{PKG}/files'
 WORK = f'/sdcard/Android/data/{PKG}/files/checks'
 PROJECT = WORK + '/PruebaUI'
+FIXTURE = ROOT + '/checks/ClipTest.mp4'
 LOG = []
 
 
@@ -143,21 +144,21 @@ def main():
     assert shell('id').startswith('uid=0'), 'Rooted test emulator required; never modifies a real phone'
     shell('am', 'force-stop', PKG)
     config = ROOT + '/app.concat.editor'
-    shell('mkdir', '-p', config, WORK)
+    shell('mkdir', '-p', config, WORK, ROOT + '/checks')
     prefs = {'locale':'es', 'accent':'coral', 'server':{'enabled':True,'listen':'127.0.0.1:7420','token':TEST_TOKEN}}
     run('adb', 'shell', f'cat > {shlex.quote(config+"/settings.json")}', data=json.dumps(prefs).encode())
     fixture = OUT / 'ClipTest.mp4'
     run('ffmpeg', '-y', '-v', 'error', '-f', 'lavfi', '-i', 'testsrc2=s=320x180:r=30:d=4', '-f', 'lavfi', '-i', 'sine=frequency=440:sample_rate=48000:duration=4', '-c:v', 'libx264', '-pix_fmt', 'yuv420p', '-c:a', 'aac', '-shortest', str(fixture))
-    run('adb', 'push', str(fixture), WORK + '/ClipTest.mp4')
+    run('adb', 'push', str(fixture), FIXTURE)
     # Root-written files must belong to the application before it writes recents/settings.
     uid = shell('stat', '-c', '%u', ROOT)
-    shell('chown', '-R', f'{uid}:{uid}', config)
-    shell('restorecon', '-RF', config)
+    shell('chown', '-R', f'{uid}:{uid}', config, ROOT + '/checks')
+    shell('restorecon', '-RF', config, ROOT + '/checks')
     restart()
     run('adb', 'forward', 'tcp:7420', 'tcp:7420')
     rpc = Rpc()
     rpc.call('project.create', location=WORK, name='PruebaUI', video={'width':320,'height':180,'rateNum':30,'rateDen':1})
-    imported = rpc.call('media.import', path=PROJECT, file=WORK+'/ClipTest.mp4')
+    imported = rpc.call('media.import', path=PROJECT, file=FIXTURE)
     project = imported['project']
     timeline = project['timelines'][0]
     rpc.call('edit.apply', path=PROJECT, command={'op':'addClip','mediaId':project['media'][0]['id'],'trackId':timeline['tracks'][0]['id'],'start':0,'ripple':False})
@@ -257,7 +258,8 @@ def main():
                     else:
                         entry.pop('transitionIn', None)
         control_path = WORK+'/Control-'+label
-        shell('mkdir','-p',control_path)
+        rpc.call('project.create', location=WORK, name='Control-'+label, video=d['video'])
+        rpc.call('project.close', path=control_path, save=True)
         run('adb','shell','cat > '+shlex.quote(control_path+'/concat.json'),data=json.dumps(control).encode())
         rpc.call('project.open', path=control_path)
         rpc.call('preview.frame', path=control_path, time=at,

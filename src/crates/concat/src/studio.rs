@@ -2621,7 +2621,16 @@ impl Studio {
                         }
                     })
                     .fold(0.0_f32, f32::max);
-                if tallest > 0.0 { tallest } else { LANE_MEDIUM }
+                if tallest > 0.0 {
+                    tallest
+                } else if self.lanes.centred {
+                    // Empty desktop lanes hid the main track when a phone
+                    // reopened a project with no selection yet. Keep them
+                    // as small drop gaps; occupied lanes keep full height.
+                    12.0
+                } else {
+                    LANE_MEDIUM
+                }
             }
         }
     }

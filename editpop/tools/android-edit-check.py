@@ -7,6 +7,7 @@ under test. No test hooks or automation settings are added to a delivered APK.
 """
 import csv
 import io
+import copy
 import json
 import re
 import shlex
@@ -15,14 +16,16 @@ import subprocess as sp
 import sys
 import time
 from pathlib import Path
-from PIL import Image
+from PIL import Image, ImageOps
 
 PKG = 'cl.kokumix.editpop.concatcandidate'
+TEST_TOKEN = 'editpop-ci-only-loopback-token-0123456789abcdef'
 OUT = Path(sys.argv[1] if len(sys.argv) > 1 else 'android-edit-check')
 OUT.mkdir(parents=True, exist_ok=True)
 ROOT = f'/data/user/0/{PKG}/files'
 WORK = f'/sdcard/Android/data/{PKG}/files/checks'
 PROJECT = WORK + '/PruebaUI'
+FIXTURE = ROOT + '/checks/ClipTest.mp4'
 LOG = []
 
 
@@ -40,11 +43,23 @@ def shot(name):
     return p
 
 
-def words(name):
+def words(name, region=None, contrast=False):
     p = shot(name)
+    offset = 0
+    if region is not None:
+        original = Image.open(p)
+        offset = int(original.height * region[0])
+        cropped = original.crop((0, offset, original.width, int(original.height * region[1])))
+        if contrast:
+            cropped = ImageOps.grayscale(cropped).point(lambda v: 0 if v > 185 else 255)
+        p = OUT / (name + '-ocr.png')
+        cropped.save(p)
     txt = run('tesseract', str(p), 'stdout', '-l', 'spa+eng', '--psm', '11', 'tsv').decode()
     (OUT / (name + '.tsv')).write_text(txt)
-    return [row for row in csv.DictReader(io.StringIO(txt), delimiter='\t') if row['text'].strip()]
+    rows = [row for row in csv.DictReader(io.StringIO(txt), delimiter='\t') if row['text'].strip()]
+    for row in rows:
+        row['top'] = str(int(row['top']) + offset)
+    return rows
 
 
 def tap(x, y):
@@ -56,6 +71,12 @@ def find(pattern, name, min_y=0, max_y=1):
     rows = words(name)
     w, h = Image.open(OUT / (name + '.png')).size
     found = [r for r in rows if min_y*h <= int(r['top']) <= max_y*h and re.search(pattern, r['text'], re.I)]
+    if not found:
+        # Filmstrip artwork makes whole-screen OCR skip the white caption
+        # on its blue header. A high-contrast crop finds that real caption;
+        # coordinates stay in the original Android screenshot.
+        rows = words(name+'-contrast', region=(min_y, max_y), contrast=True)
+        found = [r for r in rows if re.search(pattern, r['text'], re.I)]
     if not found:
         raise AssertionError(f'{name}: label {pattern!r} absent; text={[r["text"] for r in rows]}')
     r = found[0]
@@ -96,10 +117,19 @@ def document(name, predicate):
 
 class Rpc:
     def __init__(self):
-        self.s = socket.create_connection(('127.0.0.1', 7420), timeout=30)
+        deadline = time.monotonic() + 30
+        while True:
+            try:
+                self.s = socket.create_connection(('127.0.0.1', 7420), timeout=3)
+                self.s.settimeout(60)
+                break
+            except OSError:
+                if time.monotonic() >= deadline:
+                    raise
+                time.sleep(.5)
         self.f = self.s.makefile('rwb')
         self.n = 0
-        self.call('auth', token='')
+        self.call('auth', token=TEST_TOKEN)
 
     def call(self, method, **params):
         self.n += 1
@@ -132,20 +162,21 @@ def main():
     assert shell('id').startswith('uid=0'), 'Rooted test emulator required; never modifies a real phone'
     shell('am', 'force-stop', PKG)
     config = ROOT + '/app.concat.editor'
-    shell('mkdir', '-p', config, WORK)
-    prefs = {'locale':'es', 'accent':'coral', 'server':{'enabled':True,'listen':'127.0.0.1:7420','token':''}}
+    shell('mkdir', '-p', config, WORK, ROOT + '/checks')
+    prefs = {'locale':'es', 'accent':'coral', 'server':{'enabled':True,'listen':'127.0.0.1:7420','token':TEST_TOKEN}}
     run('adb', 'shell', f'cat > {shlex.quote(config+"/settings.json")}', data=json.dumps(prefs).encode())
     fixture = OUT / 'ClipTest.mp4'
     run('ffmpeg', '-y', '-v', 'error', '-f', 'lavfi', '-i', 'testsrc2=s=320x180:r=30:d=4', '-f', 'lavfi', '-i', 'sine=frequency=440:sample_rate=48000:duration=4', '-c:v', 'libx264', '-pix_fmt', 'yuv420p', '-c:a', 'aac', '-shortest', str(fixture))
-    run('adb', 'push', str(fixture), WORK + '/ClipTest.mp4')
+    run('adb', 'push', str(fixture), FIXTURE)
     # Root-written files must belong to the application before it writes recents/settings.
     uid = shell('stat', '-c', '%u', ROOT)
-    shell('chown', '-R', f'{uid}:{uid}', config)
+    shell('chown', '-R', f'{uid}:{uid}', config, ROOT + '/checks')
+    shell('restorecon', '-RF', config, ROOT + '/checks')
     restart()
     run('adb', 'forward', 'tcp:7420', 'tcp:7420')
     rpc = Rpc()
     rpc.call('project.create', location=WORK, name='PruebaUI', video={'width':320,'height':180,'rateNum':30,'rateDen':1})
-    imported = rpc.call('media.import', path=PROJECT, file=WORK+'/ClipTest.mp4')
+    imported = rpc.call('media.import', path=PROJECT, file=FIXTURE)
     project = imported['project']
     timeline = project['timelines'][0]
     rpc.call('edit.apply', path=PROJECT, command={'op':'addClip','mediaId':project['media'][0]['id'],'trackId':timeline['tracks'][0]['id'],'start':0,'ripple':False})
@@ -153,7 +184,7 @@ def main():
     rpc.call('project.close', path=PROJECT, save=True)
     rpc.close()
     restart()
-    click_label('PruebaUI', '01-home')
+    click_label('Prueba', '01-home')
     time.sleep(3)
     # A real body tap places the playhead inside the clip. Its header is
     # found on screen, not by an internal callback or edit command.
@@ -203,7 +234,7 @@ def main():
     tap(w*.5, h*.2)
     shot('14-finished-editor')
     restart()
-    click_label('PruebaUI','15-reopen')
+    click_label('Prueba','15-reopen')
     time.sleep(3)
     shot('16-reopened-editor')
     reopened = document('17-reopened', lambda d:len(d.get('clips',[]))==2)
@@ -224,6 +255,35 @@ def main():
         time.sleep(2)
     else:
         raise AssertionError('Export did not complete within 300s')
+    # Prove that the renderer actually uses these properties. Render a
+    # control with only the effect removed, and one with only the transition
+    # removed. The UI-produced document itself is never modified by these
+    # controls, and both mirrors of a control's active timeline are changed.
+    cut = clips[1]['start']
+    effect_at = round(min(3.7, cut + .75)*30)/30
+    transition_at = round((cut + .1)*30)/30
+    for label, at in [('effect', effect_at), ('transition', transition_at)]:
+        rpc.call('preview.frame', path=PROJECT, time=at,
+                 output=PROJECT+'/'+label+'-actual.png', width=1920, height=1080)
+        run('adb','pull',PROJECT+'/'+label+'-actual.png',str(OUT/(label+'-actual.png')))
+        control = copy.deepcopy(d)
+        control['name'] = 'Control-'+label
+        for entries in [control['clips'], control['timelines'][0]['clips']]:
+            for entry in entries:
+                if entry['id'] == right_id:
+                    if label == 'effect':
+                        entry['videoEffects'] = []
+                    else:
+                        entry.pop('transitionIn', None)
+        control_path = WORK+'/Control-'+label
+        rpc.call('project.create', location=WORK, name='Control-'+label, video=d['video'])
+        rpc.call('project.close', path=control_path, save=True)
+        run('adb','shell','cat > '+shlex.quote(control_path+'/concat.json'),data=json.dumps(control).encode())
+        rpc.call('project.open', path=control_path)
+        rpc.call('preview.frame', path=control_path, time=at,
+                 output=control_path+'/control.png', width=1920,height=1080)
+        run('adb','pull',control_path+'/control.png',str(OUT/(label+'-control.png')))
+        rpc.call('project.close', path=control_path, save=False)
     rpc.call('project.close', path=PROJECT, save=True)
     rpc.close()
     run('adb','pull',PROJECT+'/ui-result.mp4',str(OUT/'ui-result.mp4'))
@@ -234,6 +294,19 @@ def main():
     assert abs(float(probe['format']['duration'])-4)<.1
     assert any(s['codec_type']=='audio' for s in probe['streams'])
     run('ffmpeg','-v','error','-i',str(OUT/'ui-result.mp4'),'-f','null','-')
+    from PIL import ImageChops, ImageStat
+    scores = {}
+    for label, at in [('effect', effect_at), ('transition', transition_at)]:
+        actual = Image.open(OUT/(label+'-actual.png')).convert('RGB')
+        control = Image.open(OUT/(label+'-control.png')).convert('RGB')
+        scores[label+'_difference_from_control'] = sum(ImageStat.Stat(ImageChops.difference(actual,control)).mean)/3
+        assert scores[label+'_difference_from_control'] > .5, f'{label} not visible in rendered frame: {scores}'
+        frame = OUT/(label+'-export.png')
+        run('ffmpeg','-y','-v','error','-i',str(OUT/'ui-result.mp4'),'-ss',str(at),'-frames:v','1',str(frame))
+        encoded = Image.open(frame).convert('RGB')
+        scores[label+'_export_error'] = sum(ImageStat.Stat(ImageChops.difference(actual,encoded)).mean)/3
+        assert scores[label+'_export_error'] < 10, f'Preview/export disagree: {scores}'
+    (OUT/'visual-verification.json').write_text(json.dumps(scores,indent=2))
     (OUT/'PASS.json').write_text(json.dumps({'result':'PASS','scope':'real taps split, effect, transition; saved/reopened; same document exported via engine API at1080p; no Samsung test','actions':LOG},indent=2))
 
 

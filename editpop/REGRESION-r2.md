@@ -22,7 +22,7 @@ Fuentes compiladas y firmadas, aún sin publicar actualización:
 Ambos commits tienen el mismo árbol fuente. Las pruebas posteriores sólo
 modifican el script y workflow, no la aplicación compilada.
 
-**Bloqueo abierto:** los runs39680426318 y39680600905 completaron división,
+**Bloqueo inicial, corregido en la compilación siguiente:** los runs39680426318 y39680600905 completaron división,
 efecto, transición, guardado y reapertura, pero la exportación de cuatro segundos
 a1080p no terminó en300segundos en SwiftShader. No se declara exportación
 verificada ni se atribuye el problema al rendimiento del Samsung. El run39682305653
@@ -49,3 +49,31 @@ comportamiento en segundo plano. La comparación de fotogramas con controles
 sin efecto/sin transición comprueba que el motor no ignore las propiedades.
 No hay entradas de prueba ni ajustes de automatización activados en la APK.
 Los vídeos del usuario y su clave privada de firma no se envían a CI.
+
+## Exportación resuelta y nueva revisión de color
+
+Run39683762902 (x86b0883fcc, app equivalente a ARM53b12356) aprobó el recorrido
+completo de edición y exportación por API:120frames,1920x1080,H264/AAC,4s.
+Pixelate y Dissolve se distinguen de sus controles sin efecto/sin transición.
+La decodificación estricta local pasó; tono440Hz presente en1sy3s sin silencio.
+Run39687957650 aprobó además los botones reales Exportar y la publicación
+MediaStore de un proyecto1080p en Movies/EditPop, is_pending=0. No prueba Samsung.
+
+La inspección posterior encontró VUI con primarias/transferencia/matriz0
+(reservado/GBR), aunque el codificador recibía BT709. El emulador ignora los
+color aspects. Error medio visor/export alrededor de8.7/255, por lo que se
+reforzó la prueba. Un diagnóstico local de cambio de etiquetas, SIN recodificar,
+redujo el error a2.93/255 (Pixelate) y2.73/255 (Dissolve). Ese archivo modificado
+es sólo diagnóstico; no se presenta como salida de una nueva APK.
+
+Corrección nueva pendiente de ejecutar: PacketTags usa los filtros existentes
+h264_metadata/hevc_metadata de FFmpeg sobre los paquetes de MediaCodec, y repone
+las etiquetas del contenedor. Respeta las primarias, transferencia y rango del
+encoder, incluido HDR declarado; no desarrolla un códec ni recodifica. Check
+ARM64 aprobado16.12s. H264/BT709 se verificará con una nueva APK; HEVC/HDR no se
+declaran comprobados en dispositivo.
+
+La prueba nueva usa proyecto1080p, exige BT709 en todos los campos y rangoTV,
+reduce el umbral de error medio a4/255 y exige mayor parecido al resultado
+editado que al control. También exporta el mismo documento editado desde los
+botones de la app a galería. No hay validación física de SamsungS26.

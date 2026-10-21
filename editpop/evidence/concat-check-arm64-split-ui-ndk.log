@@ -1,0 +1,356 @@
+    Checking cfg-if v1.0.4
+    Checking libc v0.2.189
+    Checking bitflags v2.13.1
+    Checking log v0.4.34
+    Checking libm v0.2.16
+    Checking critical-section v1.2.0
+    Checking portable-atomic v1.15.0
+    Checking smallvec v1.15.2
+    Checking once_cell v1.21.4
+    Checking memchr v2.8.3
+    Checking num-traits v0.2.19
+    Checking bytemuck v1.25.2
+    Checking arrayvec v0.7.8
+    Checking stable_deref_trait v1.2.1
+    Checking zerofrom v0.1.8
+    Checking yoke v0.8.3
+    Checking thiserror v2.0.20
+    Checking foldhash v0.2.0
+    Checking zerovec v0.11.8
+    Checking writeable v0.6.4
+    Checking zerocopy v0.8.56
+    Checking hashbrown v0.17.1
+    Checking equivalent v1.0.2
+    Checking simd-adler32 v0.3.10
+    Checking tinystr v0.8.4
+    Checking adler2 v2.0.1
+    Checking litemap v0.8.3
+    Checking icu_locale_core v2.3.0
+    Checking jni-sys v0.4.1
+    Checking potential_utf v0.1.6
+    Checking zerotrie v0.2.5
+    Checking crc32fast v1.5.1
+    Checking icu_provider v2.3.1
+    Checking miniz_oxide v0.9.1
+    Checking libloading v0.8.9
+    Checking raw-window-handle v0.6.2
+    Checking flate2 v1.1.10
+    Checking jni-sys v0.3.1
+    Checking indexmap v2.14.0
+    Checking rustc-hash v1.1.0
+    Checking naga-types v30.0.1
+    Checking serde_core v1.0.229
+    Checking static_assertions v1.1.0
+    Checking utf8_iter v1.0.4
+    Checking unicode-width v0.2.2
+    Checking bit-vec v0.9.1
+    Checking bit-set v0.10.0
+    Checking codespan-reporting v0.13.1
+    Checking icu_collections v2.3.0
+    Checking ndk-sys v0.6.0+11769913
+    Checking miniz_oxide v0.8.9
+    Checking fdeflate v0.3.7
+    Checking half v2.7.1
+    Checking spirv v0.4.0+sdk-1.4.341.0
+    Checking allocator-api2 v0.2.21
+    Checking unicode-ident v1.0.24
+    Checking naga v30.0.1
+    Checking hashbrown v0.16.1
+    Checking android_system_properties v0.1.6
+    Checking scopeguard v1.2.0
+    Checking lock_api v0.4.14
+    Checking icu_properties_data v2.3.0
+    Checking slotmap v1.1.1
+    Checking parking_lot_core v0.9.12
+    Checking ash v0.38.0+1.3.281
+    Checking wgpu-types v30.0.1
+    Checking dlib v0.5.3
+    Checking float-cmp v0.9.0
+    Checking tinyvec_macros v0.1.1
+    Checking presser v0.3.1
+    Checking gpu-allocator v0.28.0
+    Checking tinyvec v1.12.0
+    Checking strict-num v0.1.1
+    Checking icu_normalizer_data v2.3.0
+    Checking wayland-sys v0.31.11
+    Checking wgpu-naga-bridge v30.0.1
+    Checking parking_lot v0.12.5
+    Checking icu_properties v2.3.0
+    Checking khronos-egl v6.0.0
+    Checking ordered-float v5.5.0
+    Checking renderdoc-sys v1.1.0
+    Checking arrayref v0.3.9
+    Checking glow v0.17.0
+    Checking profiling v1.0.18
+    Checking wgpu-hal v30.0.1
+    Checking tiny-skia-path v0.12.0
+    Checking icu_normalizer v2.3.0
+    Checking png v0.18.1
+    Checking memmap2 v0.9.11
+    Checking unicode-script v0.5.8
+    Checking serde v1.0.229
+    Checking wgpu-core-deps-windows-linux-android v30.0.1
+    Checking font-types v0.12.4
+    Checking unicode-bidi v0.3.18
+    Checking read-fonts v0.41.0
+    Checking wgpu-core v30.0.1
+    Checking tiny-skia v0.12.0
+    Checking wgpu v30.0.1
+    Checking bytes v1.12.1
+    Checking itoa v1.0.18
+    Checking combine v4.6.8
+    Checking thiserror v1.0.69
+    Checking zmij v1.0.23
+    Checking unicode-linebreak v0.1.5
+    Checking icu_locale_fallback_data v2.3.0
+    Checking serde_json v1.0.151
+    Checking skrifa v0.44.0
+    Checking num_enum v0.7.6
+    Checking polycool v0.4.0
+    Checking roxmltree v0.21.1
+    Checking kurbo v0.13.1
+    Checking ndk v0.9.0
+    Checking icu_locale_fallback v2.3.0
+    Checking harfrust v0.12.0
+    Checking euclid v0.22.14
+    Checking ndk-context v0.1.1
+    Checking zune-core v0.5.3
+    Checking byteorder-lite v0.1.0
+    Checking concat-core v0.2.8 (/workspace/Concat/src/crates/concat-core)
+    Checking siphasher v1.0.3
+    Checking zeroize v1.9.0
+    Checking rustls-pki-types v1.15.1
+    Checking svgtypes v0.16.1
+    Checking zune-jpeg v0.5.15
+    Checking ref-cast v1.0.27
+    Checking lyon_geom v1.0.19
+    Checking memoffset v0.9.1
+    Checking fontdb v0.24.0
+   Compiling ring v0.17.14
+   Compiling icu_decimal_data v2.3.0
+   Compiling generic-array v0.14.7
+    Checking simplecss v0.2.2
+    Checking base64 v0.23.1
+    Checking rawpointer v0.2.1
+    Checking data-url v0.3.2
+    Checking xmlwriter v0.1.0
+    Checking unicode-vo v0.1.0
+    Checking imagesize v0.15.0
+    Checking linebender_resource_handle v0.1.1
+    Checking pico-args v0.5.0
+    Checking quick-error v2.0.1
+    Checking dyn-clone v1.0.20
+    Checking parlance v0.1.0
+    Checking typenum v1.20.1
+    Checking unicode-segmentation v1.13.3
+    Checking color_quant v1.1.0
+    Checking weezl v0.1.12
+    Checking gif v0.14.2
+   Compiling getrandom v0.3.4
+    Checking fontique v0.11.1
+    Checking schemars v1.2.3
+    Checking image-webp v0.2.4
+    Checking usvg v0.48.1
+    Checking matrixmultiply v0.3.11
+    Checking field-offset v0.3.6
+    Checking lyon_path v1.0.19
+   Compiling ort-sys v2.0.0-rc.13
+    Checking icu_segmenter_data v2.3.0
+   Compiling pulldown-cmark v0.13.4
+    Checking fixed_decimal v0.7.2
+    Checking rgb v0.8.53
+    Checking num-complex v0.4.6
+    Checking num-integer v0.1.47
+    Checking tracing-core v0.1.36
+    Checking core_maths v0.1.1
+    Checking getrandom v0.2.17
+    Checking untrusted v0.9.0
+    Checking pxfm v0.1.30
+    Checking pin-project-lite v0.2.17
+    Checking unicase v2.9.0
+    Checking winnow v1.0.4
+    Checking toml_parser v1.1.3+spec-1.1.0
+   Compiling ffmpeg-the-third v6.0.0+ffmpeg-9.0
+    Checking tracing v0.1.44
+    Checking moxcms v0.8.1
+    Checking const-field-offset v0.2.1
+    Checking ttf-parser v0.25.1
+    Checking ndarray v0.17.2
+    Checking resvg v0.48.1
+    Checking icu_decimal v2.3.0
+    Checking icu_segmenter v2.3.0
+    Checking concat-project v0.2.8 (/workspace/Concat/src/crates/concat-project)
+    Checking ffmpeg-sys-the-third v6.0.0+ffmpeg-9.0
+    Checking idna_adapter v1.2.2
+    Checking parley_data v0.11.1
+    Checking derive_more v2.1.1
+    Checking iana-time-zone v0.1.65
+   Compiling crossbeam-utils v0.8.22
+    Checking toml_datetime v1.1.1+spec-1.1.0
+    Checking serde_spanned v1.1.1
+    Checking toml_writer v1.1.2+spec-1.1.0
+    Checking htmlparser v0.2.1
+    Checking zeno v0.3.3
+    Checking yazi v0.2.1
+    Checking percent-encoding v2.3.2
+    Checking bitflags v1.3.2
+    Checking png v0.17.16
+    Checking form_urlencoded v1.2.2
+   Compiling concat-effects v0.2.8 (/workspace/Concat/src/crates/concat-effects)
+    Checking swash v0.2.10
+   Compiling concat-media v0.2.8 (/workspace/Concat/src/crates/concat-media)
+    Checking i-slint-common v1.18.1
+    Checking toml v1.1.5+spec-1.1.0
+    Checking pin-project v1.1.13
+    Checking vtable v0.5.0
+    Checking chrono v0.4.45
+    Checking parley v0.11.1
+    Checking idna v1.1.0
+   Compiling skia-bindings v0.153.3
+   Compiling glutin_egl_sys v0.7.1
+    Checking ort v2.0.0-rc.13
+    Checking rustls-webpki v0.103.15
+    Checking image v0.25.10
+    Checking lyon_extra v1.1.0
+    Checking lyon_algorithms v1.0.21
+    Checking crypto-common v0.1.7
+    Checking block-buffer v0.10.4
+   Compiling rustls v0.23.45
+    Checking webpki-roots v1.0.9
+    Checking strum v0.28.0
+    Checking taffy v0.10.1
+   Compiling crossbeam-epoch v0.9.20
+    Checking clru v0.6.3
+    Checking aho-corasick v1.1.5
+    Checking sys-locale v0.3.2
+    Checking slab v0.4.12
+    Checking unicode-ccc v0.4.0
+    Checking unicode-properties v0.1.4
+    Checking cesu8 v1.1.0
+    Checking pin-weak v1.1.0
+    Checking regex-syntax v0.8.11
+    Checking subtle v2.6.1
+    Checking pollster v0.4.0
+    Checking unicode-bidi-mirroring v0.4.0
+    Checking simdutf8 v0.1.5
+    Checking simd_cesu8 v1.2.0
+    Checking rustybuzz v0.20.1
+    Checking concat-render v0.2.8 (/workspace/Concat/src/crates/concat-render)
+   Compiling cpal v0.16.0
+    Checking regex-automata v0.4.18
+    Checking i-slint-core v1.18.1
+    Checking jni v0.21.1
+   Compiling glutin v0.32.3
+    Checking webpki-roots v0.26.11
+    Checking digest v0.10.7
+   Compiling jni v0.22.4
+    Checking concat-vision v0.2.8 (/workspace/Concat/src/crates/concat-vision)
+    Checking url v2.5.8
+    Checking fontdb v0.23.0
+   Compiling crossbeam-deque v0.8.7
+    Checking cpufeatures v0.2.17
+    Checking pin-utils v0.1.0
+    Checking base64 v0.22.1
+    Checking dasp_sample v0.11.0
+    Checking ureq v2.12.1
+warning: variable does not need to be mutable
+   --> patches/whisper-rs-sys/build.rs:154:13
+    |
+154 |         let mut bindings = bindgen::Builder::default()
+    |             ----^^^^^^^^
+    |             |
+    |             help: remove this `mut`
+    |
+    = note: `#[warn(unused_mut)]` (part of `#[warn(unused)]`) on by default
+
+warning: `whisper-rs-sys` (build script) generated 1 warning
+    Checking spin_on v0.1.1
+   Compiling android-activity v0.6.1
+    Checking sha2 v0.10.9
+   Compiling i-slint-renderer-skia v1.18.1 (/workspace/Concat/src/patches/i-slint-renderer-skia)
+    Checking concat-text v0.2.8 (/workspace/Concat/src/crates/concat-text)
+    Checking concat-export v0.2.8 (/workspace/Concat/src/crates/concat-export)
+    Checking skia-safe v0.153.3
+   Compiling rayon-core v1.13.0
+    Checking android-properties v0.2.2
+    Checking either v1.18.0
+    Checking scoped-tls-hkt v0.1.5
+    Checking glow v0.18.0
+   Compiling i-slint-backend-android-activity v1.18.1
+    Checking concat-host v0.2.8 (/workspace/Concat/src/crates/concat-host)
+   Compiling whisper-rs-sys v0.15.0 (/workspace/Concat/src/patches/whisper-rs-sys)
+    Checking regex v1.13.1
+    Checking rand_core v0.9.5
+   Compiling rustix v1.1.4
+    Checking ppv-lite86 v0.2.21
+    Checking errno v0.3.14
+    Checking minimal-lexical v0.2.1
+    Checking bit-vec v0.8.0
+    Checking linux-raw-sys v0.12.1
+    Checking bit-set v0.8.0
+    Checking nom v7.1.3
+   Compiling esaxx-rs v0.1.10
+   Compiling ahash v0.8.12
+    Checking rand_chacha v0.9.0
+   Compiling i-slint-backend-selector v1.18.1
+   Compiling sherpa-onnx-sys v1.13.7
+    Checking rayon v1.12.0
+    Checking itertools v0.14.0
+    Checking castaway v0.2.4
+    Checking base64 v0.13.1
+    Checking ryu v1.0.23
+   Compiling whisper-rs v0.16.0
+    Checking macro_rules_attribute v0.2.3
+    Checking compact_str v0.9.1
+    Checking spm_precompiled v0.1.4
+   Compiling concat-server v0.2.8 (/workspace/Concat/src/crates/concat-server)
+    Checking monostate v0.1.18
+    Checking rayon-cond v0.4.0
+    Checking derive_builder v0.20.2
+    Checking rand v0.9.5
+    Checking fancy-regex v0.17.0
+    Checking xattr v1.6.1
+    Checking concat-api v0.2.8 (/workspace/Concat/src/crates/concat-api)
+    Checking i-slint-renderer-software v1.18.1
+    Checking dary_heap v0.3.9
+    Checking unicode-normalization-alignments v0.1.12
+    Checking filetime v0.2.29
+    Checking daachorse v3.0.3
+    Checking unicode_categories v0.1.1
+    Checking libbz2-rs-sys v0.2.5
+    Checking bzip2 v0.6.1
+    Checking tokenizers v0.23.2
+    Checking tar v0.4.46
+    Checking slint v1.18.1
+    Checking sherpa-onnx v1.13.7
+   Compiling concat-ui v0.2.8 (/workspace/Concat/src/crates/concat-ui)
+    Checking concat-speech v0.2.8 (/workspace/Concat/src/crates/concat-speech)
+    Checking concat-mcp v0.2.8 (/workspace/Concat/src/crates/concat-mcp)
+   Compiling concat v0.2.8 (/workspace/Concat/src/crates/concat)
+    Checking env_filter v0.1.4
+    Checking android_log-sys v0.3.2
+    Checking android_logger v0.15.1
+   Compiling concat-android v0.2.8 (/workspace/Concat/src/crates/concat-android)
+warning: concat-android@0.2.8: ANDROID_BUILD_TOOLS_VERSION environment variable is not set, using '35.0.0'.
+warning: missing documentation for a struct field
+   --> crates/concat/src/platform.rs:740:9
+    |
+740 |         video: bool,
+    |         ^^^^^^^^^^^
+    |
+    = note: requested on the command line with `-W missing-docs`
+
+warning: missing documentation for a struct field
+   --> crates/concat/src/platform.rs:741:9
+    |
+741 |         audio: bool,
+    |         ^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+   --> crates/concat/src/platform.rs:742:9
+    |
+742 |         image: bool,
+    |         ^^^^^^^^^^^
+
+warning: `concat` (lib) generated 3 warnings
+    Finished `quick` profile [optimized] target(s) in 7m 57s

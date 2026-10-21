@@ -1,0 +1,2 @@
+   215: 00000000005b350c    12 FUNC    GLOBAL DEFAULT    14 OrtGetApiBase@@VERS_1.27.1
+   217: 00000000006e0294   564 FUNC    GLOBAL DEFAULT    14 OrtSessionOptionsAppendExecutionProvider_Nnapi@@VERS_1.27.1

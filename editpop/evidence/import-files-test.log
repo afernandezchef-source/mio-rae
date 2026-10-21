@@ -1,0 +1,1 @@
+PASS: 7 scenarios (copy/collision, concurrent reservation, read failure, close failure, path containment, unavailable folder cleanup, zero-length read)

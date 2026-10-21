@@ -1,0 +1,83 @@
+name: EditPop Android candidate
+on:
+  workflow_dispatch:
+  push:
+    branches: [editpop/concat-android-build]
+concurrency:
+  group: editpop-android-${{ github.ref }}
+  cancel-in-progress: false
+permissions:
+  contents: read
+jobs:
+  candidate:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 120
+    env:
+      CARGO_BUILD_JOBS: '1'
+      FFMPEG_JOBS: '2'
+      GGML_NATIVE: 'OFF'
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - name: Check build memory
+        run: |
+          free -h
+          python3 - <<'PY'
+          import pathlib
+          host_kib = int(next(line.split()[1] for line in pathlib.Path('/proc/meminfo').read_text().splitlines() if line.startswith('MemTotal:')))
+          limits = [host_kib * 1024]
+          for name in ('/sys/fs/cgroup/memory.max', '/sys/fs/cgroup/memory/memory.limit_in_bytes'):
+              path = pathlib.Path(name)
+              if path.exists():
+                  value = path.read_text().strip()
+                  if value.isdigit():
+                      limits.append(int(value))
+          available = min(limits)
+          print(f'Build memory limit: {available / (1024**3):.1f} GiB')
+          assert available >= 14 * 1024**3, 'Use a runner with at least 16 GiB RAM; 8 GiB failed locally.'
+          PY
+      - name: Prepare host and pinned Android tools
+        run: |
+          echo "JAVA_HOME=$JAVA_HOME_17_X64" >> "$GITHUB_ENV"
+          echo "$JAVA_HOME_17_X64/bin" >> "$GITHUB_PATH"
+          sudo apt-get update
+          sudo apt-get install -y cmake ninja-build libclang-dev pkg-config libssl-dev
+          sdkmanager 'platforms;android-36' 'build-tools;35.0.0' 'ndk;27.2.12479018'
+          echo "ANDROID_NDK_HOME=$ANDROID_HOME/ndk/27.2.12479018" >> "$GITHUB_ENV"
+          rustup toolchain install 1.93.1 --profile minimal
+          rustup target add aarch64-linux-android --toolchain 1.93.1
+          cargo +1.93.1 install cargo-apk --version 0.10.0 --locked
+      - name: Build mobile libraries
+        run: |
+          src/scripts/ffmpeg-mobile.sh aarch64-linux-android
+          src/scripts/sherpa-mobile.sh aarch64-linux-android
+      - name: Create temporary test signing key
+        run: |
+          keytool -genkeypair -keystore "$RUNNER_TEMP/editpop-test.jks" -storepass android -keypass android -alias editpop -keyalg RSA -keysize 2048 -validity 365 -dname 'CN=EditPop Test'
+          echo "CARGO_APK_QUICK_KEYSTORE=$RUNNER_TEMP/editpop-test.jks" >> "$GITHUB_ENV"
+          echo 'CARGO_APK_QUICK_KEYSTORE_PASSWORD=android' >> "$GITHUB_ENV"
+      - name: Build candidate
+        working-directory: src
+        run: |
+          set -euo pipefail
+          eval "$(scripts/mobile-env.sh aarch64-linux-android)"
+          cargo +1.93.1 apk build --profile quick -p concat-android --target aarch64-linux-android 2>&1 | tee editpop-build.log
+      - name: Verify and collect candidate
+        run: |
+          set -euo pipefail
+          apk=src/target/quick/apk/EditPop-Concat-Candidate.apk
+          mkdir -p editpop-artifact
+          editpop/tools/verify-apk.sh "$apk" | tee editpop-artifact/verification.log
+          cp "$apk" editpop-artifact/
+          git archive --format=zip --output=editpop-artifact/EditPop-candidate-source.zip HEAD
+          cp editpop/README.md editpop/ANDROID-VALIDATION.md editpop-artifact/
+          sha256sum editpop-artifact/*.apk editpop-artifact/*.zip > editpop-artifact/SHA256SUMS
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
+        if: always()
+        with:
+          name: EditPop-candidate-build-and-evidence
+          path: |
+            editpop-artifact/
+            src/editpop-build.log
+          if-no-files-found: warn

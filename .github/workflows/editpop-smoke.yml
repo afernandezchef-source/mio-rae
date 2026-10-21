@@ -72,7 +72,6 @@ jobs:
           cache-workspace-crates: true
           cache-on-failure: true
           key: editpop-android-x86_64-workspace-r2
-          cache-on-failure: true
       - name: Temporary test key
         run: |
           keytool -genkeypair -keystore "$RUNNER_TEMP/editpop-test.jks" -storepass android -keypass android -alias editpop -keyalg RSA -keysize 2048 -validity 365 -dname 'CN=EditPop Test'

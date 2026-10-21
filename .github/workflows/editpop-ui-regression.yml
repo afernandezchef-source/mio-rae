@@ -5,7 +5,7 @@ on:
       apk_run_id:
         description: Native x86 build run providing the APK artifact
         required: true
-        default: '39644578816'
+        default: '39678071674'
   push:
     branches: [editpop/concat-ui-regression]
 permissions:
@@ -16,7 +16,7 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 40
     env:
-      APK_RUN_ID: ${{ inputs.apk_run_id || '39644578816' }}
+      APK_RUN_ID: ${{ inputs.apk_run_id || '39678071674' }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:

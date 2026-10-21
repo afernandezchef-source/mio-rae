@@ -225,7 +225,17 @@ def main():
     w, h = Image.open(OUT/'09-effect-applied.png').size
     tap(w*.5, h*.2)  # dismiss sheet
     toolbar('Trans', '10-transitions')
-    _, transition_search_y = click_label('Buscar', '11-transition-search', min_y=.4)
+    try:
+        _, transition_search_y = click_label('Buscar', '11-transition-search', min_y=.4)
+    except AssertionError:
+        # The gray placeholder can be dropped by OCR even in a crop. On
+        # this fixed API30/Pixel6 profile, the search field is one header
+        # below the recognized sheet title; touch that real field. The
+        # following result and project assertions still require the UI edit.
+        _, title_y = find('Transiciones', '11-transition-title', min_y=.4, max_y=.55)
+        transition_search_y = title_y + w*.125
+        LOG.append({'tap':'transition search below sheet title','x':w*.25,'y':transition_search_y})
+        tap(w*.25, transition_search_y)
     shell('input','text','soft%scross-dissolve')
     shell('input','keyevent','4')
     time.sleep(1)

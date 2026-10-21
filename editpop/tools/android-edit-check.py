@@ -16,7 +16,7 @@ import subprocess as sp
 import sys
 import time
 from pathlib import Path
-from PIL import Image
+from PIL import Image, ImageOps
 
 PKG = 'cl.kokumix.editpop.concatcandidate'
 TEST_TOKEN = 'editpop-ci-only-loopback-token-0123456789abcdef'
@@ -43,11 +43,23 @@ def shot(name):
     return p
 
 
-def words(name):
+def words(name, region=None, contrast=False):
     p = shot(name)
+    offset = 0
+    if region is not None:
+        original = Image.open(p)
+        offset = int(original.height * region[0])
+        cropped = original.crop((0, offset, original.width, int(original.height * region[1])))
+        if contrast:
+            cropped = ImageOps.grayscale(cropped).point(lambda v: 0 if v > 185 else 255)
+        p = OUT / (name + '-ocr.png')
+        cropped.save(p)
     txt = run('tesseract', str(p), 'stdout', '-l', 'spa+eng', '--psm', '11', 'tsv').decode()
     (OUT / (name + '.tsv')).write_text(txt)
-    return [row for row in csv.DictReader(io.StringIO(txt), delimiter='\t') if row['text'].strip()]
+    rows = [row for row in csv.DictReader(io.StringIO(txt), delimiter='\t') if row['text'].strip()]
+    for row in rows:
+        row['top'] = str(int(row['top']) + offset)
+    return rows
 
 
 def tap(x, y):
@@ -59,6 +71,12 @@ def find(pattern, name, min_y=0, max_y=1):
     rows = words(name)
     w, h = Image.open(OUT / (name + '.png')).size
     found = [r for r in rows if min_y*h <= int(r['top']) <= max_y*h and re.search(pattern, r['text'], re.I)]
+    if not found:
+        # Filmstrip artwork makes whole-screen OCR skip the white caption
+        # on its blue header. A high-contrast crop finds that real caption;
+        # coordinates stay in the original Android screenshot.
+        rows = words(name+'-contrast', region=(min_y, max_y), contrast=True)
+        found = [r for r in rows if re.search(pattern, r['text'], re.I)]
     if not found:
         raise AssertionError(f'{name}: label {pattern!r} absent; text={[r["text"] for r in rows]}')
     r = found[0]

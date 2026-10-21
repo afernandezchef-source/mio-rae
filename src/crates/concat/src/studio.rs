@@ -4159,7 +4159,15 @@ impl Studio {
                 ..ClipPatch::default()
             }
         };
+        let start = clip.start;
+        let end = clip.start + clip.duration;
         self.apply(Command::UpdateClip { clip_id, patch });
+        if self.lanes.centred {
+            if f64::from(self.playhead) < start || f64::from(self.playhead) >= end {
+                self.seek((start + (end - start) / 2.0) as f32);
+            }
+            self.notify(&t("phone.effectApplied"), false);
+        }
         // Show it: the applied chain is where the knobs are, and a card
         // that did something with no visible result reads as a card that
         // did nothing.
@@ -4222,6 +4230,10 @@ impl Studio {
     /// The incoming clip's id, or what to say instead.
     fn transition_cut(&self) -> Result<String, String> {
         match self.selection.as_slice() {
+            [one] if self.lanes.centred => {
+                concat_project::edit_targets::phone_transition_cut(self.timeline(), one)
+                    .ok_or_else(|| t("studio.selectTwoAdjacentClips"))
+            }
             [one] => Ok(one.clone()),
             [a, b] => {
                 let (Some(a), Some(b)) = (self.clip(a), self.clip(b)) else {
@@ -7649,11 +7661,27 @@ impl Studio {
             })
             .map(|clip| clip.id.clone())
             .collect();
-        if !victims.is_empty() {
-            self.apply(Command::SplitClips {
-                clip_ids: victims,
-                time: at,
-            });
+        if victims.is_empty() {
+            self.notify(&t("studio.parkPlayheadInsideClip"), true);
+            return;
+        }
+        self.stop_glide();
+        self.apply(Command::SplitClips {
+            clip_ids: victims.clone(),
+            time: at,
+        });
+        // Keep the phone's selection on the newly created right-hand
+        // segment, the one the playhead now shows. Its incoming seam is
+        // also the cut the next Transition action should edit.
+        if self.lanes.centred && victims.len() == 1 {
+            let track = self.clip(&victims[0]).map(|clip| clip.track_id.clone());
+            if let Some(right) = self.timeline().clips.iter().find(|clip| {
+                !victims.contains(&clip.id)
+                    && Some(&clip.track_id) == track.as_ref()
+                    && (clip.start - at).abs() < self.frame_seconds() / 2.0
+            }) {
+                self.selection = vec![right.id.clone()];
+            }
         }
     }
 
@@ -9053,8 +9081,12 @@ impl Studio {
         // A phone's Filters and Transitions sheets open on every shelf at
         // once, under their All pill; a desk's strip starts on the first.
         if phone {
-            self.library[0].group = -1;
-            self.library[3].group = -1;
+            // Phone effects use category pills, not the desktop group
+            // picker. Leaving group=0 hid all other groups even when
+            // their category was chosen, resulting in empty shelves.
+            for view in &mut self.library {
+                view.group = -1;
+            }
         }
         self.lanes.centred = phone;
         self.meters.phone = phone;

@@ -1,0 +1,118 @@
+name: EditPop Android native startup check
+on:
+  workflow_dispatch:
+  push:
+    branches: [editpop/concat-android-smoke]
+permissions:
+  contents: read
+concurrency:
+  group: editpop-smoke-${{ github.ref }}
+  cancel-in-progress: false
+jobs:
+  startup:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 120
+    env:
+      CARGO_BUILD_JOBS: '1'
+      FFMPEG_JOBS: '2'
+      GGML_NATIVE: 'OFF'
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - name: Require larger build runner
+        run: |
+          free -h
+          python3 - <<'PY'
+          import pathlib
+          ram = int(next(x.split()[1] for x in pathlib.Path('/proc/meminfo').read_text().splitlines() if x.startswith('MemTotal:'))) * 1024
+          limit = pathlib.Path('/sys/fs/cgroup/memory.max')
+          if limit.exists() and limit.read_text().strip().isdigit():
+              ram = min(ram, int(limit.read_text().strip()))
+          assert ram >= 14 * 1024**3, '8 GiB was insufficient; use a larger runner'
+          PY
+      - name: Prepare host
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y cmake ninja-build libclang-dev pkg-config libssl-dev ffmpeg tesseract-ocr tesseract-ocr-spa python3-pil
+      - uses: actions/setup-java@cf277c60eb25467037889841efdb72551f06f6c3
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: android-actions/setup-android@9fc6c4e9069bf8d3d10b2204b1fb8f6ef7065407
+        with:
+          packages: platform-tools
+      - name: Install pinned build tools
+        run: |
+          sdkmanager 'platforms;android-36' 'build-tools;35.0.0' 'ndk;27.2.12479018'
+          echo "ANDROID_NDK_HOME=$ANDROID_HOME/ndk/27.2.12479018" >> "$GITHUB_ENV"
+          rustup toolchain install 1.93.1 --profile minimal
+          rustup target add x86_64-linux-android --toolchain 1.93.1
+          cargo +1.93.1 install cargo-apk --version 0.10.0 --locked
+      - name: Restore native FFmpeg
+        id: ffmpeg
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9
+        with:
+          path: src/vendor/ffmpeg/x86_64-linux-android
+          key: editpop-ffmpeg-x86_64-ndk27-${{ hashFiles('src/scripts/ffmpeg-mobile.sh') }}
+      - name: Build native FFmpeg
+        if: steps.ffmpeg.outputs.cache-hit != 'true'
+        run: src/scripts/ffmpeg-mobile.sh x86_64-linux-android
+      - name: Save native FFmpeg
+        if: steps.ffmpeg.outputs.cache-hit != 'true'
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9
+        with:
+          path: src/vendor/ffmpeg/x86_64-linux-android
+          key: ${{ steps.ffmpeg.outputs.cache-primary-key }}
+      - name: Fetch runtime libraries
+        run: src/scripts/sherpa-mobile.sh x86_64-linux-android
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6
+        with:
+          workspaces: src
+          cache-workspace-crates: true
+          key: editpop-android-x86_64
+          cache-on-failure: true
+      - name: Temporary test key
+        run: |
+          keytool -genkeypair -keystore "$RUNNER_TEMP/editpop-test.jks" -storepass android -keypass android -alias editpop -keyalg RSA -keysize 2048 -validity 365 -dname 'CN=EditPop Test'
+          echo "CARGO_APK_QUICK_KEYSTORE=$RUNNER_TEMP/editpop-test.jks" >> "$GITHUB_ENV"
+          echo 'CARGO_APK_QUICK_KEYSTORE_PASSWORD=android' >> "$GITHUB_ENV"
+      - name: Build native emulator APK
+        working-directory: src
+        run: |
+          set -euo pipefail
+          eval "$(scripts/mobile-env.sh x86_64-linux-android)"
+          /usr/bin/time -v cargo +1.93.1 apk build --profile quick -p concat-android --target x86_64-linux-android 2>&1 | tee editpop-build-x86.log
+          "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify target/quick/apk/EditPop-Concat-Candidate.apk
+      - name: Enable emulator KVM
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+      - name: Verify startup on Android 11
+        timeout-minutes: 30
+        uses: reactivecircus/android-emulator-runner@a421e43855164a8197daf9d8d40fe71c6996bb0d
+        with:
+          api-level: 30
+          target: google_apis
+          arch: x86_64
+          profile: pixel_6
+          cores: 4
+          ram-size: 4096M
+          disk-size: 6G
+          emulator-boot-timeout: 900
+          emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -no-boot-anim -camera-back none -camera-front none
+          disable-animations: true
+          script: |
+            scripts/ci/smoke-android.sh --package cl.kokumix.editpop.concatcandidate --out smoke-android --wait 15 src/target/quick/apk/EditPop-Concat-Candidate.apk
+            python3 editpop/tools/android-edit-check.py android-edit-check
+      - name: Preserve startup evidence
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
+        with:
+          name: EditPop-Android11-startup-evidence
+          path: |
+            smoke-android/
+            android-edit-check/
+            src/editpop-build-x86.log
+          if-no-files-found: warn

@@ -1540,16 +1540,12 @@ export component Lanes inherits Rectangle {
             }
             // Click anywhere on the timeline and the playhead goes there,
             // a clip included: it is selected and the playhead lands on it.
-            // Not under a finger: the lanes are held at the playhead there,
-            // and a tap that moved it would slide the whole cut half a
-            // screen to bring the clip to the middle - the clip tapped
-            // would leap away from the thumb that tapped it. A tap selects;
-            // the lanes stay where they were, the way they do in every
-            // phone editor.
+            // A tap also positions the playhead on phones. Selection alone
+            // left it at zero, making Split silently refuse and effects on
+            // an off-screen selected clip appear to do nothing. This fires
+            // only after a body tap, never a trim or a drag.
             clicked(x) => {
-                if (!root.finger) {
-                    root.scrubbed(Math.max(0, root.seconds-at(self.x + x)));
-                }
+                root.scrubbed(Math.max(0, root.seconds-at(self.x + x)));
             }
             hovered(x) => { root.hover-at(self.x + x); }
             hover-ended => { root.hover-off(); }

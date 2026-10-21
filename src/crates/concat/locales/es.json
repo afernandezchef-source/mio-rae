@@ -663,7 +663,7 @@
   "start.showInFolder": "Mostrar en la carpeta",
   "start.sortName": "Nombre",
   "start.sortRecent": "Recientes",
-  "start.welcome": "Te damos la bienvenida a Concat",
+  "start.welcome": "Te damos la bienvenida a EditPop",
   "start.welcomeBack": "Hola de nuevo",
   "start.welcomeBackNote": "Sigue donde lo dejaste o empieza algo nuevo.",
   "start.welcomeNote": "Un editor de vídeo gratuito que funciona por completo en este equipo.",
@@ -906,5 +906,6 @@
   "voices.styles": "Estilos",
   "voices.stylesHint": "Un estilo es una voz con efectos. Elige uno para escribir con él: los efectos van al clip de voz, donde puedes cambiarlos.",
   "voices.voices": "Voces",
-  "voices.yours": "Tus voces"
+  "voices.yours": "Tus voces",
+  "phone.effectApplied": "Efecto aplicado al clip seleccionado"
 }

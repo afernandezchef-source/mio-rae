@@ -50,8 +50,10 @@ def words(name, region=None, contrast=False):
         original = Image.open(p)
         offset = int(original.height * region[0])
         cropped = original.crop((0, offset, original.width, int(original.height * region[1])))
-        if contrast:
+        if contrast == 'white':
             cropped = ImageOps.grayscale(cropped).point(lambda v: 0 if v > 185 else 255)
+        elif contrast == 'gray':
+            cropped = ImageOps.autocontrast(ImageOps.invert(ImageOps.grayscale(cropped)))
         p = OUT / (name + '-ocr.png')
         cropped.save(p)
     txt = run('tesseract', str(p), 'stdout', '-l', 'spa+eng', '--psm', '11', 'tsv').decode()
@@ -71,11 +73,13 @@ def find(pattern, name, min_y=0, max_y=1):
     rows = words(name)
     w, h = Image.open(OUT / (name + '.png')).size
     found = [r for r in rows if min_y*h <= int(r['top']) <= max_y*h and re.search(pattern, r['text'], re.I)]
-    if not found:
-        # Filmstrip artwork makes whole-screen OCR skip the white caption
-        # on its blue header. A high-contrast crop finds that real caption;
-        # coordinates stay in the original Android screenshot.
-        rows = words(name+'-contrast', region=(min_y, max_y), contrast=True)
+    for style in ['gray', 'white']:
+        if found:
+            break
+        # OCR can skip a filmstrip caption or a gray search placeholder.
+        # Keep the real screenshot coordinates; never substitute an edit.
+        end = min(max_y, .70) if pattern == 'Buscar' else max_y
+        rows = words(name+'-'+style, region=(min_y, end), contrast=style)
         found = [r for r in rows if re.search(pattern, r['text'], re.I)]
     if not found:
         raise AssertionError(f'{name}: label {pattern!r} absent; text={[r["text"] for r in rows]}')
@@ -210,7 +214,7 @@ def main():
     shell('input', 'keyevent', '4')
     time.sleep(1)
     # Search text itself is above the cards; choose the lower match.
-    rows = words('07-effect-results')
+    rows = words('07-effect-results', region=(.4, .95), contrast='gray')
     matches = [r for r in rows if re.search('pixel', r['text'], re.I)]
     assert len(matches) >= 2, 'Search result card not rendered'
     r = max(matches, key=lambda r:int(r['top']))
@@ -224,7 +228,7 @@ def main():
     shell('input','text','Dissolve')
     shell('input','keyevent','4')
     time.sleep(1)
-    rows = words('12-transition-results')
+    rows = words('12-transition-results', region=(.4, .95), contrast='gray')
     matches = [r for r in rows if re.search('dissolve', r['text'], re.I)]
     assert len(matches) >= 2, 'Transition result card not rendered'
     r = max(matches, key=lambda r:int(r['top']))

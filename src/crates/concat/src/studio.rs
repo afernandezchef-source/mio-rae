@@ -9282,6 +9282,15 @@ impl Studio {
         });
 
         editor.set_selected_clip(self.selected());
+        let selected_lane = self.sole_selection().and_then(|id| {
+            let clip = self.clip(&id)?;
+            let row = self.row_of(&clip.track_id) as usize;
+            let heights = self.lane_heights();
+            Some((heights.iter().take(row).sum::<f32>(), *heights.get(row)?))
+        });
+        let (top, height) = selected_lane.unwrap_or((-1.0, 0.0));
+        editor.set_selection_lane_top(top);
+        editor.set_selection_lane_height(height);
         editor.set_selected_transition(self.selected_transition_data());
         let (knobs, choices) = self.transition_knobs();
         sync(&models.transition_knobs, knobs);

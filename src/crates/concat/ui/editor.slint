@@ -144,6 +144,9 @@ export global Editor {
 
     // ── the inspector ──
     in-out property <SelectedClipData> selected-clip;
+    /// Selected lane geometry, for the phone to reveal imported/split clips.
+    in-out property <float> selection-lane-top: -1;
+    in-out property <float> selection-lane-height;
     /// The transition selected on its own; see SelectedTransitionData.
     in-out property <SelectedTransitionData> selected-transition;
     /// The selected clip's media's audio tracks, one label each, in file

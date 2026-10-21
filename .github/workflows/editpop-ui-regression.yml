@@ -1,0 +1,68 @@
+name: EditPop Android editing regression from built APK
+on:
+  workflow_dispatch:
+    inputs:
+      apk_run_id:
+        description: Native x86 build run providing the APK artifact
+        required: true
+        default: '39644131501'
+  push:
+    branches: [editpop/concat-ui-regression]
+permissions:
+  contents: read
+  actions: read
+jobs:
+  edit:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+    env:
+      APK_RUN_ID: ${{ inputs.apk_run_id || '39644131501' }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - name: Prepare screenshot recognition and media verification
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ffmpeg tesseract-ocr tesseract-ocr-spa python3-pil
+      - name: Download exact previously built native APK
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          [[ "$APK_RUN_ID" =~ ^[0-9]+$ ]]
+          mkdir -p android-edit-check
+          gh api "repos/$GITHUB_REPOSITORY/actions/runs/$APK_RUN_ID" --jq '{id,head_sha,conclusion,html_url}' > android-edit-check/apk-source-run.json
+          gh run download "$APK_RUN_ID" --repo "$GITHUB_REPOSITORY" --name EditPop-Android11-startup-evidence --dir previous
+          cp previous/src/target/quick/apk/EditPop-Concat-Candidate.apk candidate.apk
+          sha256sum candidate.apk > android-edit-check/apk-sha256.txt
+      - name: Enable KVM
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+      - name: Split, effect, transition, save, reopen and export
+        uses: reactivecircus/android-emulator-runner@a421e43855164a8197daf9d8d40fe71c6996bb0d
+        with:
+          api-level: 30
+          target: google_apis
+          arch: x86_64
+          profile: pixel_6
+          cores: 4
+          ram-size: 4096M
+          disk-size: 6G
+          emulator-boot-timeout: 900
+          emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -no-boot-anim -camera-back none -camera-front none
+          disable-animations: true
+          script: |
+            scripts/ci/smoke-android.sh --package cl.kokumix.editpop.concatcandidate --out smoke-android --wait 15 candidate.apk
+            python3 editpop/tools/android-edit-check.py android-edit-check
+      - name: Preserve verification and screenshots
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
+        with:
+          name: EditPop-Android-edit-regression
+          path: |
+            smoke-android/
+            android-edit-check/
+          if-no-files-found: warn

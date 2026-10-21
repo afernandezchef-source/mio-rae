@@ -156,7 +156,16 @@ def main():
     time.sleep(3)
     # A real body tap places the playhead inside the clip. Its header is
     # found on screen, not by an internal callback or edit command.
-    click_label('ClipTest', '02-editor', min_y=.55, max_y=.88)
+    for attempt in range(4):
+        try:
+            click_label('ClipTest', f'02-editor-{attempt}', min_y=.55, max_y=.88)
+            break
+        except AssertionError:
+            w, h = Image.open(OUT/f'02-editor-{attempt}.png').size
+            shell('input', 'swipe', str(int(w*.3)), str(int(h*.81)), str(int(w*.3)), str(int(h*.64)), '500')
+            time.sleep(1)
+    else:
+        raise AssertionError('Imported clip is not reachable on the timeline')
     toolbar('Dividir', '03-split')
     d = document('04-split', lambda d: len(d.get('clips', [])) == 2)
     clips = sorted(d['clips'], key=lambda c:c['start'])

@@ -115,4 +115,5 @@ jobs:
             smoke-android/
             android-edit-check/
             src/editpop-build-x86.log
+            src/target/quick/apk/EditPop-Concat-Candidate.apk
           if-no-files-found: warn

@@ -1,0 +1,29 @@
+{
+  "run_id": 39631665408,
+  "source_commit": "e57cbccf48b7c68045698739c106f031f0f42972",
+  "apk_bytes": 90346615,
+  "apk_sha256": "0dfda72e8d5038af87f4abdc9adf8458f2ae9dcec3f3ec766c5d9a42a89ed0b3",
+  "source_sha256": "24dd89a11aba067e10f2dd2b118f76e6d381abb8e7a63f1d728a8eab04359021",
+  "ci_apk_sha256": "8136acf8c8b50c09f0e227706b073cfab8a5b0f7dc80211af5f3f59a4a91514e",
+  "non_signature_entries_identical": 12,
+  "persistent_local_test_signing": true,
+  "private_key_distributed": false,
+  "structural_verification": "PASS",
+  "runtime_verification": "PASS: independent x86_64 build, Android 11 API30 startup only",
+  "samsung_s26_verification": "user testing; no result received",
+  "build_memory_gib": 15.6,
+  "build_peak_rss_kib": 14601456,
+  "build_wall_seconds": 842.85,
+  "android_startup": {
+    "run_id": 39633057257,
+    "source_commit": "701560152a32f4710ae0e36a328cece2c6201dc2",
+    "abi": "x86_64",
+    "api": 30,
+    "observation_seconds": 60,
+    "resumed": true,
+    "crash_log_bytes": 0,
+    "screenshot_inspected": true,
+    "full_edit_export": "not run"
+  },
+  "known_branding_issue": "r1 welcome says Concat; EditPop welcome source correction staged, not in r1"
+}

@@ -7666,22 +7666,18 @@ impl Studio {
             return;
         }
         self.stop_glide();
-        self.apply(Command::SplitClips {
-            clip_ids: victims.clone(),
+        let one = victims.len() == 1;
+        let created = self.apply(Command::SplitClips {
+            clip_ids: victims,
             time: at,
         });
-        // Keep the phone's selection on the newly created right-hand
-        // segment, the one the playhead now shows. Its incoming seam is
-        // also the cut the next Transition action should edit.
-        if self.lanes.centred && victims.len() == 1 {
-            let track = self.clip(&victims[0]).map(|clip| clip.track_id.clone());
-            if let Some(right) = self.timeline().clips.iter().find(|clip| {
-                !victims.contains(&clip.id)
-                    && Some(&clip.track_id) == track.as_ref()
-                    && (clip.start - at).abs() < self.frame_seconds() / 2.0
-            }) {
-                self.selection = vec![right.id.clone()];
-            }
+        // Keep the phone's selection on the minted right-hand segment,
+        // which is now under the playhead and owns the incoming seam.
+        if self.lanes.centred
+            && one
+            && let Some(right) = created
+        {
+            self.selection = vec![right];
         }
     }
 

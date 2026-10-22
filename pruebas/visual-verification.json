@@ -1,0 +1,8 @@
+{
+  "effect_difference_from_control": 5.5975366512345675,
+  "effect_export_error": 2.9262954925411524,
+  "effect_export_vs_control_error": 6.02731143904321,
+  "transition_difference_from_control": 1.0452973894032922,
+  "transition_export_error": 2.7290842013888885,
+  "transition_export_vs_control_error": 2.940361529063786
+}

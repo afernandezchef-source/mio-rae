@@ -1,0 +1,61 @@
+{
+  "result": "PASS",
+  "scope": "Real UI Export buttons, H264/AAC1080p and completed MediaStore publication; synthetic project; no Samsung test",
+  "actions": [
+    {
+      "tap": "Prueba",
+      "x": 411.5,
+      "y": 771.0
+    },
+    {
+      "tap": "ClipTest",
+      "x": 643.0,
+      "y": 1608.5
+    },
+    {
+      "tap": "Dividir",
+      "x": 289.0,
+      "y": 2212.5
+    },
+    {
+      "tap": "Efect",
+      "x": 657.0,
+      "y": 2212.5
+    },
+    {
+      "tap": "Buscar",
+      "x": 148.5,
+      "y": 1328.0
+    },
+    {
+      "tap": "Trans",
+      "x": 468.5,
+      "y": 2212.5
+    },
+    {
+      "tap": "transition search below sheet title",
+      "x": 270.0,
+      "y": 1158.0
+    },
+    {
+      "tap": "Prueba",
+      "x": 411.5,
+      "y": 771.0
+    },
+    {
+      "tap": "Prueba",
+      "x": 411.5,
+      "y": 1128.0
+    },
+    {
+      "tap": "Exportar from visible button OCR",
+      "x": 930.5,
+      "y": 126.0
+    },
+    {
+      "tap": "Exportar from visible button OCR",
+      "x": 540.0,
+      "y": 2192.5
+    }
+  ]
+}

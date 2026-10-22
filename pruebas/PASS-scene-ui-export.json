@@ -1,0 +1,79 @@
+{
+  "result": "PASS",
+  "scope": "Real UI Export buttons, H264/AAC1080p and completed MediaStore publication; synthetic project; no Samsung test",
+  "actions": [
+    {
+      "tap": "Escenas",
+      "x": 420.5,
+      "y": 771.0
+    },
+    {
+      "tap": "ClipTest",
+      "x": 643.0,
+      "y": 1608.5
+    },
+    {
+      "tap": "Sugerir",
+      "x": 624.0,
+      "y": 2215.5
+    },
+    {
+      "tap": "Descartar",
+      "x": 505.5,
+      "y": 1743.0
+    },
+    {
+      "tap": "Sugerir",
+      "x": 624.0,
+      "y": 2215.5
+    },
+    {
+      "tap": "00:02",
+      "x": 375.5,
+      "y": 1320.0
+    },
+    {
+      "tap": "Ver button on proposal row"
+    },
+    {
+      "tap": "Aplicar cortes marcados",
+      "method": "visible full-width button OCR",
+      "y": 1459.0
+    },
+    {
+      "tap": "Deshacer",
+      "method": "visible enabled transport icon on fixed emulator",
+      "bounds": [
+        912,
+        1322,
+        943,
+        1353
+      ]
+    },
+    {
+      "tap": "Rehacer",
+      "method": "visible enabled transport icon on fixed emulator",
+      "bounds": [
+        1007,
+        1322,
+        1037,
+        1353
+      ]
+    },
+    {
+      "tap": "Escenas",
+      "x": 420.5,
+      "y": 771.0
+    },
+    {
+      "tap": "Exportar from visible button OCR",
+      "x": 930.5,
+      "y": 126.0
+    },
+    {
+      "tap": "Exportar from visible button OCR",
+      "x": 540.0,
+      "y": 2192.5
+    }
+  ]
+}

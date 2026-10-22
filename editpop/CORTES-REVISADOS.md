@@ -51,8 +51,9 @@ sintético rojo/azul de 4 s con destello breve y tono de 440 Hz. La API solo cre
 proyecto inicial; la propuesta, descarte, selección, vista previa, aplicación y
 deshacer/rehacer se realizan con controles Android reales. Después se reabre y
 exporta a 1080p, verificando publicación, duración, pistas y decodificación.
-Esta prueba está preparada, pendiente de ejecución para el candidato. No hay
-acceso físico al Samsung S26.
+La prueba final pasó en run39773291471 sobre la APK x86 de e8ea0fa, sin cambios
+en código de app respecto al ARM9504a2e. La imagen exportada y el tono de440Hz
+se comprobaron a1 y3 s. No hay acceso físico al Samsung S26.
 
 La limpieza de audio, la estabilización y la reducción de grano mantienen sus
 propios pendientes; esta función no demuestra que estén verificadas en Android.

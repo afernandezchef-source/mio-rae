@@ -26,7 +26,7 @@ OUT.mkdir(parents=True, exist_ok=True)
 ROOT = f'/data/user/0/{PKG}/files'
 WORK = f'/sdcard/Android/data/{PKG}/files/checks'
 SCENARIO = os.environ.get('EDITPOP_TEST_SCENARIO', 'full')
-PROJECT_NAME = 'EscenasUI' if SCENARIO == 'scene-cuts' else 'PruebaUI'
+PROJECT_NAME = {'scene-cuts':'EscenasUI','audio-cleanup':'AudioUI','stabilization':'CamaraUI','grain-reduction':'GranoUI'}.get(SCENARIO,'PruebaUI')
 PROJECT = WORK + '/' + PROJECT_NAME
 FIXTURE = ROOT + '/checks/ClipTest.mp4'
 LOG = []
@@ -228,20 +228,40 @@ def ui_export_check():
     (OUT/'PASS-ui-export.json').write_text(json.dumps({'result':'PASS','scope':'Real UI Export buttons, H264/AAC1080p and completed MediaStore publication; synthetic project; no Samsung test','actions':LOG},indent=2))
 
 
-def accessible_tap(label):
-    """Tap the actual accessible Android control, never call an editor API."""
+def transport_tap(label):
+    """Tap the real transport control; no editor API or keyboard substitution."""
     import xml.etree.ElementTree as ET
-    shell('uiautomator', 'dump', '/sdcard/editpop-window.xml')
-    raw = run('adb', 'exec-out', 'cat', '/sdcard/editpop-window.xml')
-    (OUT/(label+'-accessibility.xml')).write_bytes(raw)
-    for node in ET.fromstring(raw).iter('node'):
-        if label.lower() in (node.get('content-desc','')+' '+node.get('text','')).lower():
+    nodes = []
+    try:
+        shell('uiautomator', 'dump', '/sdcard/editpop-window.xml')
+        raw = run('adb', 'exec-out', 'cat', '/sdcard/editpop-window.xml')
+        (OUT/(label+'-accessibility.xml')).write_bytes(raw)
+        nodes = list(ET.fromstring(raw).iter('node'))
+    except (sp.SubprocessError, ET.ParseError):
+        pass
+    for node in nodes:
+        if label.lower() in (node.get('content-desc','').lower(), node.get('text','').lower()):
             bounds = [int(v) for v in re.findall(r'\d+',node.get('bounds',''))]
             if len(bounds)==4 and bounds[2]>bounds[0] and bounds[3]>bounds[1]:
                 LOG.append({'accessible tap':label,'bounds':bounds})
                 tap((bounds[0]+bounds[2])/2,(bounds[1]+bounds[3])/2)
                 return
-    raise AssertionError(f'Accessible control absent: {label}')
+    # Slint's NativeActivity may expose no virtual accessibility nodes. On this
+    # fixed API30/Pixel6 profile, locate the actual enabled white transport icon.
+    # The saved document assertion afterwards must prove the button took effect.
+    assert label in ('Deshacer','Rehacer')
+    im = Image.open(shot(label+'-transport')).convert('RGB')
+    w,h = im.size
+    left,right = (.83,.89) if label=='Deshacer' else (.92,.97)
+    x0,y0,x1,y1 = int(w*left),int(h*.53),int(w*right),int(h*.59)
+    region = im.crop((x0,y0,x1,y1))
+    mask = Image.new('L',region.size)
+    mask.putdata([255 if min(r,g,b)>170 else 0 for r,g,b in region.getdata()])
+    box = mask.getbbox()
+    assert box and sum(v>0 for v in mask.getdata())>25, f'No enabled visible {label} icon'
+    a,b,c,d=box
+    LOG.append({'tap':label,'method':'visible enabled transport icon on fixed emulator','bounds':[x0+a,y0+b,x0+c,y0+d]})
+    tap(x0+(a+c)/2,y0+(b+d)/2)
 
 
 def scene_cuts_check():
@@ -266,16 +286,50 @@ def scene_cuts_check():
         except AssertionError:
             assert time.monotonic()<deadline
             time.sleep(1)
-    click_label('Ver','scene-preview',min_y=.4)
-    shot('scene-preview-visible')
-    click_label('Aplicar','scene-apply',min_y=.4)
+    rows = words('scene-preview-button',region=(.4,.96),contrast='gray')
+    matches = [r for r in rows if re.fullmatch('Ver',r['text'],re.I)]
+    assert matches, 'No preview button'
+    # The instructions also say Ver: choose the button at the right of the row.
+    button = max(matches,key=lambda r:int(r['left']))
+    LOG.append({'tap':'Ver button on proposal row'})
+    tap(int(button['left'])+int(button['width'])/2,int(button['top'])+int(button['height'])/2)
+    deadline = time.monotonic()+20
+    while True:
+        picture = Image.open(shot('scene-preview-visible')).convert('RGB')
+        red,green,blue = picture.getpixel((picture.width//2,int(picture.height*.22)))
+        if blue>red+80 and blue>green+80:
+            break
+        assert time.monotonic()<deadline, ('Preview did not reach blue scene',red,green,blue)
+        time.sleep(1)
+    try:
+        click_label('Aplicar','scene-apply',min_y=.4)
+    except AssertionError:
+        # As with Export, PSM11 can skip text on the accent-filled button.
+        # Find its full-width colored rectangle, then verify its own label.
+        im=Image.open(OUT/'scene-apply.png').convert('RGB')
+        w,h=im.size
+        rows=[]
+        for y in range(int(h*.4),int(h*.95)):
+            count=sum(r>150 and g>170 and b<150 for r,g,b in
+                      im.crop((0,y,w,y+1)).getdata())
+            if count>w*.7:
+                rows.append(y)
+        assert rows, 'No full-width enabled Apply button'
+        top,bottom=min(rows),max(rows)
+        button=im.crop((int(w*.2),top+int((bottom-top)*.15),int(w*.94),bottom-int((bottom-top)*.15)))
+        p=OUT/'scene-apply-button.png'
+        button.convert('L').point(lambda v:255 if v>100 else 0).save(p)
+        text=run('tesseract',str(p),'stdout','-l','spa+eng','--psm','7').decode()
+        assert re.search('Aplicar',text,re.I), text
+        LOG.append({'tap':'Aplicar cortes marcados','method':'visible full-width button OCR','y':(top+bottom)/2})
+        tap(w/2,(top+bottom)/2)
     edited = document('scene-applied',lambda d:len(d.get('clips',[]))==2)
     clips = sorted(edited['clips'],key=lambda c:c['start'])
     assert abs(clips[1]['start']-2)<1/30+.001, clips
     assert abs(sum(c['duration'] for c in clips)-4)<.001
-    accessible_tap('Deshacer')
+    transport_tap('Deshacer')
     assert document('scene-undone',lambda d:len(d.get('clips',[]))==1)==before
-    accessible_tap('Rehacer')
+    transport_tap('Rehacer')
     assert document('scene-redone',lambda d:len(d.get('clips',[]))==2)==edited
     restart()
     click_label('Escenas','scene-reopen')
@@ -284,14 +338,262 @@ def scene_cuts_check():
     # Remove the prior full-regression export so publication must be new.
     shell('content','delete','--uri','content://media/external/video/media')
     ui_export_check()
+    # Check the actual encoded image and sound, not only container metadata.
+    import array
+    import math
+    measurements = {}
+    for second, channel in [(1,0),(3,2)]:
+        rgb = run('ffmpeg','-v','error','-ss',str(second),'-i',str(OUT/'ui-gallery-result.mp4'),
+                  '-vf','crop=2:2:(iw-2)/2:(ih-2)/2,scale=1:1','-frames:v','1','-pix_fmt','rgb24','-f','rawvideo','-')
+        assert len(rgb)==3, rgb
+        assert rgb[channel]>150 and rgb[channel]-rgb[2-channel]>100, list(rgb)
+        pcm = array.array('f')
+        pcm.frombytes(run('ffmpeg','-v','error','-ss',str(second),'-i',str(OUT/'ui-gallery-result.mp4'),
+                          '-t','0.25','-ac','1','-ar','48000','-f','f32le','-'))
+        assert len(pcm)>1000
+        rms = math.sqrt(sum(v*v for v in pcm)/len(pcm))
+        real = sum(v*math.cos(2*math.pi*440*i/48000) for i,v in enumerate(pcm))
+        imag = sum(v*math.sin(2*math.pi*440*i/48000) for i,v in enumerate(pcm))
+        tone = 2*math.hypot(real,imag)/len(pcm)
+        assert rms>.02 and tone>.05, (rms,tone)
+        measurements[str(second)]={'center_rgb':list(rgb),'audio_rms':rms,'tone_440Hz_amplitude':tone}
+    (OUT/'scene-export-measurements.json').write_text(json.dumps(measurements,indent=2))
     (OUT/'PASS-scene-cuts.json').write_text(json.dumps({'result':'PASS','scope':'Actual Android UI: local scene detection, discard, select, preview, apply, atomic undo/redo, save/reopen,1080p export; synthetic red/blue with flash; no physical Samsung test','actions':LOG},indent=2))
+
+
+def export_control_document(edited,field,name,preview_actual=False):
+    """Counterfactual export, same model/codec with only the target property off."""
+    im=Image.open(shot('audio-export-done'));w,h=im.size
+    tap(w*.93,h*.055)
+    tap(w*.055,h*.055)
+    rpc=Rpc()
+    if preview_actual:
+        rpc.call('project.open',path=PROJECT)
+        rpc.call('preview.frame',path=PROJECT,time=2,output=PROJECT+'/effect-preview.png',width=1920,height=1080)
+        run('adb','pull',PROJECT+'/effect-preview.png',str(OUT/'effect-preview.png'))
+        rpc.call('project.close',path=PROJECT,save=True)
+    control=copy.deepcopy(edited)
+    control['name']=name
+    for entries in [control['clips'],control['timelines'][0]['clips']]:
+        for clip in entries:
+            if field=='filters': clip[field]=[]
+            else: clip.pop(field,None)
+    path=WORK+'/'+name
+    rpc.call('project.create',location=WORK,name=name,video=edited['video'])
+    rpc.call('project.close',path=path,save=True)
+    run('adb','shell','cat > '+shlex.quote(path+'/concat.json'),data=json.dumps(control).encode())
+    rpc.call('project.open',path=path)
+    job=rpc.call('export.run',path=path,output=path+'/control.mp4',width=1920,height=1080,preset='ultrafast')['job']
+    deadline=time.monotonic()+300
+    while time.monotonic()<deadline:
+        state=rpc.call('export.status',job=job)
+        if state['state']!='running':
+            assert state['state']=='done',state
+            break
+        time.sleep(2)
+    else: raise AssertionError('Control export timed out')
+    rpc.call('project.close',path=path,save=False);rpc.close()
+    run('adb','pull',path+'/control.mp4',str(OUT/(name+'.mp4')))
+    return OUT/(name+'.mp4')
+
+
+def audio_cleanup_check():
+    """Real noise switch, persistence, gallery export and matched codec control."""
+    import array
+    import math
+    before=document('audio-before',lambda d:len(d.get('clips',[]))==1)
+    toolbar('^Audio$', 'audio-open')
+    for attempt in range(8):
+        try:
+            _,y=find('Reducir','audio-noise-row-'+str(attempt),min_y=.45,max_y=.90)
+            im=Image.open(OUT/('audio-noise-row-'+str(attempt)+'.png'))
+            tap(im.width*.92,y)  # actual switch at the right of this label
+            break
+        except AssertionError:
+            im=Image.open(shot('audio-scroll-'+str(attempt)))
+            shell('input','swipe',str(int(im.width*.65)),str(int(im.height*.85)),
+                  str(int(im.width*.65)),str(int(im.height*.55)),'550')
+            time.sleep(1)
+    else:
+        raise AssertionError('Reduce noise control not reachable')
+    edited=document('audio-filter-enabled',lambda d:any(
+        any(f['id']=='concat.denoise' and f.get('enabled',True) for f in c.get('filters',[]))
+        for c in d.get('clips',[])))
+    filters=edited['clips'][0]['filters']
+    assert len(filters)==1 and abs(edited['clips'][0]['volume']-1)<1e-9
+    im=Image.open(shot('audio-noise-enabled'))
+    tap(im.width*.5,im.height*.2)  # dismiss sheet
+    restart()
+    click_label('^Audio','audio-reopen')
+    time.sleep(3)
+    assert document('audio-reopened',lambda d:bool(d['clips'][0].get('filters')))==edited
+    ui_export_check()
+    shutil=__import__('shutil')
+    shutil.copy2(OUT/'ui-gallery-result.mp4',OUT/'audio-filtered.mp4')
+    control_file=export_control_document(edited,'filters','AudioControl')
+    def measure(file,at):
+        pcm=array.array('f')
+        pcm.frombytes(run('ffmpeg','-v','error','-ss',str(at),'-i',str(file),
+                          '-t','1','-ac','1','-ar','48000','-f','f32le','-'))
+        assert len(pcm)>=47000
+        n=len(pcm);dc=sum(pcm)/n
+        sine=[math.sin(2*math.pi*440*i/48000) for i in range(n)]
+        cosine=[math.cos(2*math.pi*440*i/48000) for i in range(n)]
+        a=2*sum((v-dc)*x for v,x in zip(pcm,sine))/n
+        b=2*sum((v-dc)*x for v,x in zip(pcm,cosine))/n
+        residual=math.sqrt(sum((v-dc-a*x-b*y)**2 for v,x,y in zip(pcm,sine,cosine))/n)
+        return {'tone_amplitude':math.hypot(a,b),'residual_rms':residual,'peak':max(abs(v) for v in pcm)}
+    measurements={}
+    for at in [1,2.5]:
+        control=measure(control_file,at)
+        filtered=measure(OUT/'audio-filtered.mp4',at)
+        reduction=20*math.log10(control['residual_rms']/filtered['residual_rms'])
+        tone_change=20*math.log10(filtered['tone_amplitude']/control['tone_amplitude'])
+        assert reduction>=6,(at,reduction,control,filtered)
+        assert abs(tone_change)<1.5 and filtered['peak']<.98,(at,tone_change,filtered)
+        measurements[str(at)]={'control':control,'filtered':filtered,'residual_reduction_db':reduction,'tone_change_db':tone_change}
+    (OUT/'audio-cleanup-measurements.json').write_text(json.dumps(measurements,indent=2))
+    (OUT/'PASS-audio-cleanup.json').write_text(json.dumps({'result':'PASS','scope':'Android30 actual Reduce noise switch, save/reopen, UI1080p export; matched Android export without filter; stationary synthetic noise and440Hz tone, not real voice or Samsung','measurements':measurements,'actions':LOG},indent=2))
+
+
+def stabilization_check():
+    """Actual stabilization switch; tracked motion, persistence and output jitter."""
+    import math
+    toolbar('^Editar$', 'stabilize-open')
+    for attempt in range(12):
+        try:
+            _,y=find('Estabilizar','stabilize-row-'+str(attempt),min_y=.44,max_y=.90)
+            im=Image.open(OUT/('stabilize-row-'+str(attempt)+'.png'))
+            tap(im.width*.06,y)  # actual checkbox BEFORE the section title
+            break
+        except AssertionError:
+            im=Image.open(shot('stabilize-scroll-'+str(attempt)))
+            shell('input','swipe',str(int(im.width*.65)),str(int(im.height*.85)),
+                  str(int(im.width*.65)),str(int(im.height*.55)),'550')
+            time.sleep(1)
+    else: raise AssertionError('Stabilize control not reachable')
+    edited=document('stabilize-enabled',lambda d:bool(d['clips'][0].get('stabilize')))
+    deadline=time.monotonic()+120
+    measured=[]
+    while time.monotonic()<deadline:
+        paths=run('adb','shell','find',PROJECT+'/cache/stabilize','-name','motion',check=False).decode().splitlines()
+        if paths and paths[0].startswith(PROJECT+'/'):
+            text=run('adb','exec-out','cat',paths[0]).decode()
+            (OUT/'stabilization-motion.txt').write_text(text)
+            measured=[line.split() for line in text.splitlines() if line.startswith('f ')]
+            coverage=[line.split() for line in text.splitlines() if line.startswith('covered ')]
+            if len(measured)>=115 and any(float(line[2])>=4 for line in coverage): break
+        time.sleep(1)
+    else: raise AssertionError('Stabilization analysis did not finish')
+    tracked=sum(line[2]=='t' for line in measured)
+    assert tracked/len(measured)>.8,(tracked,len(measured))
+    im=Image.open(shot('stabilize-measured'));tap(im.width*.5,im.height*.2)
+    restart();click_label('Camara','stabilize-reopen');time.sleep(3)
+    assert document('stabilize-reopened',lambda d:bool(d['clips'][0].get('stabilize')))==edited
+    ui_export_check()
+    filtered=OUT/'stabilized.mp4'
+    __import__('shutil').copy2(OUT/'ui-gallery-result.mp4',filtered)
+    control=export_control_document(edited,'stabilize','CameraControl')
+    def marker_jitter(file):
+        decoder=sp.Popen(['ffmpeg','-v','error','-i',str(file),'-an','-vf','scale=320:180',
+                         '-pix_fmt','rgb24','-f','rawvideo','-'],stdout=sp.PIPE,stderr=sp.PIPE)
+        positions=[];index=0
+        while True:
+            frame=decoder.stdout.read(320*180*3)
+            if not frame: break
+            assert len(frame)==320*180*3
+            if 15<=index<105:
+                xs=ys=count=0
+                for pixel in range(0,len(frame),3):
+                    r,g,b=frame[pixel:pixel+3]
+                    if r>150 and g<90 and b<90:
+                        at=pixel//3;xs+=at%320;ys+=at//320;count+=1
+                assert count>40,(file.name,index,count)
+                positions.append((xs/count,ys/count))
+            index+=1
+        error=decoder.stderr.read();assert decoder.wait()==0,error
+        assert index==120 and len(positions)==90,(index,len(positions))
+        mx=sum(x for x,y in positions)/len(positions);my=sum(y for x,y in positions)/len(positions)
+        rms=math.sqrt(sum((x-mx)**2+(y-my)**2 for x,y in positions)/len(positions))
+        return {'jitter_rms_at_320x180_px':rms,'positions':positions,'frames':index}
+    original=marker_jitter(control);corrected=marker_jitter(filtered)
+    assert original['jitter_rms_at_320x180_px']>3,original
+    ratio=corrected['jitter_rms_at_320x180_px']/original['jitter_rms_at_320x180_px']
+    assert ratio<.6,ratio
+    result={'control':original,'stabilized':corrected,'residual_ratio':ratio,'tracked_frames':tracked,'measured_frames':len(measured)}
+    (OUT/'stabilization-measurements.json').write_text(json.dumps(result,indent=2))
+    (OUT/'PASS-stabilization.json').write_text(json.dumps({'result':'PASS','scope':'Android30 actual Stabilize switch, analysis cache, save/reopen and1080p UI export; camera jitter measured against matched uncorrected Android export; synthetic pure translation, not real footage or physical Samsung','measurements':result,'actions':LOG},indent=2))
+
+
+def grain_reduction_check():
+    """Actual catalogue application, preserved edge and reduced encoded noise."""
+    from PIL import ImageChops,ImageStat
+    toolbar('Efect','grain-open')
+    _,search_y=click_label('Buscar','grain-search',min_y=.4)
+    shell('input','text','grano');shell('input','keyevent','4');time.sleep(1)
+    rows=words('grain-results',region=(.4,.95),contrast='gray')
+    matches=[r for r in rows if re.search('grano',r['text'],re.I) and int(r['top'])>search_y+50]
+    assert matches,'No grain-reduction result card'
+    r=max(matches,key=lambda r:int(r['top']))
+    tap(int(r['left'])+int(r['width'])/2,int(r['top'])+int(r['height'])/2-30)
+    edited=document('grain-applied',lambda d:any(e['id']=='editpop.grain-reduction'
+        for c in d.get('clips',[]) for e in c.get('videoEffects',[])))
+    im=Image.open(shot('grain-enabled'));tap(im.width*.5,im.height*.2)
+    restart();click_label('Grano','grain-reopen');time.sleep(3)
+    assert document('grain-reopened',lambda d:bool(d['clips'][0].get('videoEffects')))==edited
+    # The smoke job already exported other synthetic projects. Require a new
+    # gallery publication from this actual grain export.
+    shell('content','delete','--uri','content://media/external/video/media')
+    started=time.monotonic();ui_export_check();round_trip=time.monotonic()-started
+    __import__('shutil').copy2(OUT/'ui-gallery-result.mp4',OUT/'grain-filtered.mp4')
+    control=export_control_document(edited,'videoEffects','GrainControl',preview_actual=True)
+    pictures={}
+    for label,file in [('control',control),('filtered',OUT/'grain-filtered.mp4')]:
+        path=OUT/('grain-'+label+'.png')
+        run('ffmpeg','-y','-v','error','-ss','2','-i',str(file),'-frames:v','1',str(path))
+        pictures[label]=Image.open(path).convert('RGB')
+    measurements={}
+    for label,box in [('left',(96,96,864,984)),('right',(1056,96,1824,984))]:
+        before=ImageStat.Stat(pictures['control'].crop(box))
+        after=ImageStat.Stat(pictures['filtered'].crop(box))
+        ratio=sum(after.stddev)/sum(before.stddev)
+        assert sum(before.stddev)/3>2,(label,before.stddev)
+        assert ratio<.8,(label,ratio,before.stddev,after.stddev)
+        assert max(abs(a-b) for a,b in zip(before.mean,after.mean))<3,(before.mean,after.mean)
+        measurements[label]={'control_stddev_rgb':before.stddev,'filtered_stddev_rgb':after.stddev,'noise_ratio':ratio}
+    left=ImageStat.Stat(pictures['filtered'].crop((959,96,960,984))).mean
+    right=ImageStat.Stat(pictures['filtered'].crop((960,96,961,984))).mean
+    contrast=sum(right)/3-sum(left)/3
+    assert contrast>80,('Sharp edge washed out',contrast)
+    preview=Image.open(OUT/'effect-preview.png').convert('RGB')
+    error=sum(ImageStat.Stat(ImageChops.difference(preview,pictures['filtered'])).mean)/3
+    control_error=sum(ImageStat.Stat(ImageChops.difference(preview,pictures['control'])).mean)/3
+    assert error<4 and error<control_error,(error,control_error)
+    measurements.update({'edge_contrast':contrast,'preview_export_mae':error,'preview_control_mae':control_error,
+        'ui_export_round_trip_seconds_including_OCR_and_validation':round_trip})
+    (OUT/'grain-measurements.json').write_text(json.dumps(measurements,indent=2))
+    (OUT/'PASS-grain-reduction.json').write_text(json.dumps({'result':'PASS','scope':'Android30 actual Reducir grano catalogue application, save/reopen,1080p UI export; noise and edge measured against same Android project without effect, shared preview/export; synthetic stationary grain, not physical Samsung','measurements':measurements,'actions':LOG},indent=2))
 
 
 def main():
     assert shell('getprop','ro.kernel.qemu') == '1', 'This script is for test emulators, not physical phones'
-    run('adb', 'root')
-    run('adb', 'wait-for-device')
-    assert shell('id').startswith('uid=0'), 'Rooted test emulator required; never modifies a real phone'
+    # Restarting adbd can close its transport before the client gets an exit
+    # status. Require a verified root shell after reconnecting, not root's exit.
+    rooted = False
+    for attempt in range(4):
+        result = sp.run(['adb','root'],stdout=sp.PIPE,stderr=sp.STDOUT,timeout=30)
+        with (OUT/'adb-root.log').open('ab') as trail:
+            trail.write(result.stdout)
+        run('adb', 'wait-for-device')
+        time.sleep(1)
+        try:
+            if shell('id').startswith('uid=0'):
+                rooted = True
+                break
+        except sp.SubprocessError:
+            pass
+        time.sleep(1)
+    assert rooted, 'Rooted test emulator required; never modifies a real phone'
     shell('am', 'force-stop', PKG)
     config = ROOT + '/app.concat.editor'
     shell('mkdir', '-p', config, WORK, ROOT + '/checks')
@@ -300,7 +602,42 @@ def main():
     fixture = OUT / 'ClipTest.mp4'
     source = 'color=red:s=180x320:r=30:d=4' if SCENARIO=='scene-cuts' else 'testsrc2=s=320x180:r=30:d=4'
     extra = ['-vf', "drawbox=c=blue:t=fill:enable='gte(t,2)',drawbox=c=white:t=fill:enable='between(t,0.5,0.55)'"] if SCENARIO=='scene-cuts' else []
-    run('ffmpeg', '-y', '-v', 'error', '-f', 'lavfi', '-i', source, '-f', 'lavfi', '-i', 'sine=frequency=440:sample_rate=48000:duration=4', *extra, '-c:v', 'libx264', '-pix_fmt', 'yuv420p', '-c:a', 'aac', '-shortest', str(fixture))
+    if SCENARIO=='grain-reduction':
+        import random
+        rng=random.Random(123)
+        image=Image.new('RGB',(1920,1080))
+        pixels=bytearray(1920*1080*3)
+        for y in range(1080):
+            for x in range(1920):
+                gray=(90 if x<960 else 190)+rng.randrange(-8,9)
+                at=(y*1920+x)*3;pixels[at:at+3]=bytes((gray,gray,gray))
+        image=Image.frombytes('RGB',image.size,bytes(pixels));image.save(OUT/'grain-source.png')
+        run('ffmpeg','-y','-v','error','-loop','1','-framerate','30','-i',str(OUT/'grain-source.png'),
+            '-f','lavfi','-i','sine=frequency=440:sample_rate=48000:duration=4',
+            '-t','4','-c:v','libx264','-preset','ultrafast','-crf','0','-pix_fmt','yuv420p','-c:a','aac','-shortest',str(fixture))
+    elif SCENARIO=='stabilization':
+        import random
+        from PIL import ImageDraw
+        rng=random.Random(42)
+        texture=Image.new('RGB',(360,220));draw=ImageDraw.Draw(texture)
+        for y in range(0,220,8):
+            for x in range(0,360,8):
+                gray=rng.randrange(30,220)
+                draw.rectangle((x,y,x+7,y+7),fill=(gray,gray,gray))
+        draw.rectangle((174,104,185,115),fill=(240,15,15))
+        texture.save(OUT/'static-texture.png')
+        run('ffmpeg','-y','-v','error','-loop','1','-framerate','30','-i',str(OUT/'static-texture.png'),
+            '-f','lavfi','-i','sine=frequency=440:sample_rate=48000:duration=4',
+            '-vf','crop=320:180:20+8*sin(2*PI*3*t):20+5*sin(2*PI*2*t)',
+            '-t','4','-c:v','libx264','-pix_fmt','yuv420p','-c:a','aac','-shortest',str(fixture))
+    elif SCENARIO=='audio-cleanup':
+        run('ffmpeg','-y','-v','error','-f','lavfi','-i',source,
+            '-f','lavfi','-i','aevalsrc=0.1*sin(2*PI*440*t):s=48000:d=4',
+            '-f','lavfi','-i','anoisesrc=c=white:a=0.02:r=48000:d=4:s=123456',
+            '-filter_complex','[1:a][2:a]amix=inputs=2:normalize=0[a]',
+            '-map','0:v','-map','[a]','-c:v','libx264','-pix_fmt','yuv420p','-c:a','aac','-shortest',str(fixture))
+    else:
+        run('ffmpeg', '-y', '-v', 'error', '-f', 'lavfi', '-i', source, '-f', 'lavfi', '-i', 'sine=frequency=440:sample_rate=48000:duration=4', *extra, '-c:v', 'libx264', '-pix_fmt', 'yuv420p', '-c:a', 'aac', '-shortest', str(fixture))
     run('adb', 'push', str(fixture), FIXTURE)
     # Root-written files must belong to the application before it writes recents/settings.
     uid = shell('stat', '-c', '%u', ROOT)
@@ -310,7 +647,7 @@ def main():
     run('adb', 'forward', 'tcp:7420', 'tcp:7420')
     rpc = Rpc()
     scenario = os.environ.get('EDITPOP_TEST_SCENARIO','full')
-    assert scenario in ('full','ui-export','scene-cuts'), scenario
+    assert scenario in ('full','ui-export','scene-cuts','audio-cleanup','stabilization','grain-reduction'), scenario
     width,height = 1920,1080
     rpc.call('project.create', location=WORK, name=PROJECT_NAME, video={'width':width,'height':height,'rateNum':30,'rateDen':1})
     imported = rpc.call('media.import', path=PROJECT, file=FIXTURE)
@@ -321,7 +658,7 @@ def main():
     rpc.call('project.close', path=PROJECT, save=True)
     rpc.close()
     restart()
-    click_label('Escenas' if scenario=='scene-cuts' else 'Prueba', '01-home')
+    click_label({'scene-cuts':'Escenas','audio-cleanup':'^Audio','stabilization':'Camara','grain-reduction':'Grano'}.get(scenario,'Prueba'), '01-home')
     time.sleep(3)
     if scenario=='ui-export':
         ui_export_check()
@@ -330,7 +667,7 @@ def main():
     # found on screen, not by an internal callback or edit command.
     for attempt in range(4):
         try:
-            click_label('ClipTest', f'02-editor-{attempt}', min_y=.55, max_y=.88)
+            click_label('Clip', f'02-editor-{attempt}', min_y=.55, max_y=.88)
             break
         except AssertionError:
             w, h = Image.open(OUT/f'02-editor-{attempt}.png').size
@@ -340,6 +677,15 @@ def main():
         raise AssertionError('Imported clip is not reachable on the timeline')
     if scenario=='scene-cuts':
         scene_cuts_check()
+        return
+    if scenario=='audio-cleanup':
+        audio_cleanup_check()
+        return
+    if scenario=='stabilization':
+        stabilization_check()
+        return
+    if scenario=='grain-reduction':
+        grain_reduction_check()
         return
     toolbar('Dividir', '03-split')
     d = document('04-split', lambda d: len(d.get('clips', [])) == 2)
@@ -477,12 +823,15 @@ def main():
 try:
     main()
 except Exception:
-    shot('FAIL')
+    try:
+        shot('FAIL')
+    except sp.SubprocessError:
+        pass
     raise
 finally:
     (OUT/'actions.json').write_text(json.dumps(LOG,indent=2))
     # Capture stalled native threads before the runner shuts down the emulator.
-    pid = shell('pidof', PKG).split()
+    pid = run('adb','shell','pidof',PKG,check=False).decode().split()
     if pid:
         for label, command in [('threads', ['adb','shell','ps','-T','-p',pid[0]]), ('native-stack', ['adb','shell','debuggerd','-b',pid[0]]), ('export-files', ['adb','shell','ls','-laR',PROJECT])]:
             try:

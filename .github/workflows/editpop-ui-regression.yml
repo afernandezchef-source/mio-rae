@@ -5,12 +5,12 @@ on:
       apk_run_id:
         description: Native x86 build run providing the APK artifact
         required: true
-        default: '39683762902'
+        default: '39770421244'
       scenario:
         description: Test full editing or the actual Export buttons and gallery
         type: choice
-        options: [ui-export, full]
-        default: ui-export
+        options: [stabilization, audio-cleanup, scene-cuts, ui-export, full]
+        default: stabilization
   push:
     branches: [editpop/concat-ui-regression]
 permissions:
@@ -21,8 +21,8 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 40
     env:
-      APK_RUN_ID: ${{ inputs.apk_run_id || '39683762902' }}
-      EDITPOP_TEST_SCENARIO: ${{ inputs.scenario || 'ui-export' }}
+      APK_RUN_ID: ${{ inputs.apk_run_id || '39770421244' }}
+      EDITPOP_TEST_SCENARIO: ${{ inputs.scenario || 'stabilization' }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:

@@ -1,0 +1,10 @@
+   Compiling concat-render v0.2.8 (/workspace/Concat/src/crates/concat-render)
+    Finished `test` profile [unoptimized] target(s) in 2.34s
+     Running unittests src/lib.rs (target/debug/deps/concat_render-fae20b65742fe464)
+
+running 1 test
+grain noise RMS ratio: 0.5332098; samples: 18984
+test gpu::tests::grain_reduction_lowers_noise_preserves_edges_alpha_and_zero_strength ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 101 filtered out; finished in 0.44s
+

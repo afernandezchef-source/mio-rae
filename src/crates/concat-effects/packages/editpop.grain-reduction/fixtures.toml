@@ -1,0 +1,21 @@
+[[probe]]
+name = "default, flat grey"
+input = [0.18, 0.18, 0.18, 1]
+expect = [0.18, 0.18, 0.18, 1]
+
+[[probe]]
+name = "minimum is identity"
+at = "min"
+input = [0.5, 0.2, 0.1, 0.5]
+expect = [0.5, 0.2, 0.1, 0.5]
+
+[[probe]]
+name = "maximum preserves flat color and alpha"
+at = "max"
+input = [0.5, 0.2, 0.1, 0.5]
+expect = [0.5, 0.2, 0.1, 0.5]
+
+[[probe]]
+name = "highlights are not clipped"
+input = [4, 1, 0.05, 1]
+expect = [4, 1, 0.05, 1]

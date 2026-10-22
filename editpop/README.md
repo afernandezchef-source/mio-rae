@@ -1,3 +1,30 @@
+# EditPop — base Concat y entrega Android r3
+
+## Estado vigente: r3 verificada
+
+[APK y guía de instalación](https://github.com/afernandezchef-source/mio-rae/tree/editpop/download-r3).
+
+Añade sugerencias locales de cortes por cambios de escena, con selección explícita,
+previsualización del fotograma, descarte, aplicación en un solo paso deshacible y
+persistencia.169 pruebas del modelo y cargo check Android ARM64 aprobados.
+La prueba Android final39773291471 pasó sin cambiar la APK x86 compilada:
+seleccionar, revisar, descartar, Ver, aplicar, deshacer/rehacer, reabrir y exportar
+1080p a galería; imagen y audio se comprobaron a ambos lados del corte.
+También pasó la regresión Dividir/Pixelate/Dissolve/guardar/reabrir/exportar.
+
+Fuente ARM9504a2e3080fa5e97534463fa643d30f56f42ce3 (run39770421752 PASS).
+x86e8ea0fa889735cf3df5c165fd06d82f20614dd89 (mismo árbol); su run inicial falló
+en el arnés al localizar Deshacer. El arnés corregido pasó en39773291471,
+commit4339518ba3425fe88a6f4cc01496c194cc0baa0a, sin diferencias en src/crates.
+APK SHA256 f5035f5af534f119044e48a34cc9bcec839a8ce91593add8dd3a2201bf2f232e,
+misma firma de r1/r2. Ver CORTES-REVISADOS.md y los87criterios del CSV.
+
+No es selección semántica de mejores momentos ni aplica transiciones solo.
+No hay prueba física en Samsung S26. Reducción de grano pendiente; ruido de audio
+y estabilización requieren validación móvil. IA, interrupciones, segundo plano
+y recorrido ampliado con capas/texto mantienen su seguimiento pendiente.
+La r2 se conserva como respaldo. Los apartados siguientes son historial.
+
 # EditPop — evaluación de Concat
 
 ## Estado vigente: r2 verificada y publicada

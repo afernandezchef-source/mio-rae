@@ -1,0 +1,80 @@
+   Compiling concat-effects v0.2.8 (/workspace/Concat/src/crates/concat-effects)
+    Finished `test` profile [unoptimized] target(s) in 2.87s
+     Running unittests src/lib.rs (target/debug/deps/concat_effects-bfcc2ea3d31bfe30)
+
+running 72 tests
+test catalogue::tests::a_chain_that_names_a_file_is_refused ... ok
+test catalogue::tests::a_package_cannot_take_over_one_that_is_installed ... ok
+test catalogue::tests::a_package_lands_on_the_shelves_it_names ... ok
+test catalogue::tests::a_stand_in_carries_the_keys_of_the_knob_it_reads ... ok
+test cube::tests::a_byte_order_mark_is_skipped ... ok
+test cube::tests::a_short_table_names_the_shortfall ... ok
+test catalogue::tests::a_retired_link_opens_as_its_stand_in ... ok
+test cube::tests::an_identity_cube_reads_as_the_identity ... ok
+test cube::tests::resolve_input_range_and_unknown_keywords_are_read ... ok
+test expr::tests::arithmetic_keeps_precedence ... ok
+test expr::tests::bad_input_is_an_error_not_a_panic ... ok
+test expr::tests::clamp_with_crossed_or_undefined_bounds_is_an_error ... ok
+test expr::tests::conditionals_and_comparisons ... ok
+test expr::tests::fixed_formats_like_the_chains_always_have ... ok
+test expr::tests::names_are_reported_and_unknown_ones_fail ... ok
+test expr::tests::round_yields_integers_and_integer_arithmetic_stays_integer ... ok
+test filters::tests::the_frame_is_the_only_thing_a_filter_may_touch ... ok
+test filters::tests::the_list_is_sorted_and_free_of_repeats ... ok
+test looks::tests::a_table_imports_as_a_format_2_look ... ok
+test looks::tests::a_table_with_a_byte_order_mark_imports ... ok
+test looks::tests::an_earlier_import_is_rewritten_once ... ok
+test manifest::tests::a_card_table_is_checked_like_the_rest ... ok
+test manifest::tests::a_compound_knob_owns_its_dotted_keys ... ok
+test manifest::tests::a_display_space_is_a_format_2_setting ... ok
+test manifest::tests::a_good_manifest_parses ... ok
+test manifest::tests::a_scene_linear_package_draws_without_a_chain ... ok
+test manifest::tests::a_transition_manifest_parses ... ok
+test manifest::tests::bad_manifests_are_rejected_with_a_reason ... ok
+test manifest::tests::bad_transition_manifests_are_rejected ... ok
+test manifest::tests::enum_parameters_pair_values_with_labels ... ok
+test manifest::tests::passes_name_their_pictures_once_from_format_2 ... ok
+test manifest::tests::the_format_is_the_first_thing_read ... ok
+test shader::tests::a_binding_of_the_wrong_kind_or_the_wrong_entry_is_refused ... ok
+test shader::tests::a_body_is_stitched_checked_and_laid_out ... ok
+test shader::tests::a_curve_is_monotone_between_its_points ... ok
+test shader::tests::a_hostile_shader_is_refused_at_load ... ok
+test shader::tests::a_missing_field_or_a_broken_body_is_refused ... ok
+test shader::tests::a_package_drawn_in_passes_binds_and_sizes_each_picture ... ok
+test shader::tests::a_package_with_no_knobs_still_binds ... ok
+test shader::tests::a_pass_reads_only_what_was_drawn_before_it ... ok
+test shader::tests::a_shrink_is_a_number_worked_out_from_the_knobs ... ok
+test cube::tests::a_table_past_the_budget_is_refused ... ok
+test shader::tests::a_transition_without_its_entry_is_refused ... ok
+test shader::tests::a_transition_body_is_stitched_over_two_inputs ... ok
+test shader::tests::the_key_changes_with_the_source ... ok
+test shader::tests::the_format_picks_the_edition_of_the_contract ... ok
+test template::tests::a_filter_name_is_spelt_out_or_the_chain_is_refused ... ok
+test template::tests::a_slot_may_be_used_twice ... ok
+test template::tests::every_filter_in_a_chain_is_named ... ok
+test template::tests::malformed_templates_fail_at_parse ... ok
+test template::tests::slots_substitute_and_braces_escape ... ok
+test tests::a_bypassed_entry_contributes_nothing ... ok
+test tests::a_chain_may_only_name_filters_that_touch_the_frame ... ok
+test tests::a_compound_knob_is_resolved_whole ... ok
+test tests::a_duplicate_id_is_refused ... ok
+test shader::tests::wheels_and_curves_are_laid_into_the_uniforms ... ok
+test tests::a_probe_holds_to_its_tolerance ... ok
+test tests::a_folder_package_with_a_table_loads_and_carries_it ... ok
+test tests::a_sound_package_checks_clean ... ok
+test tests::a_transition_probe_names_its_cut ... ok
+test tests::a_user_package_loads_from_a_directory_and_a_broken_one_is_reported ... ok
+test tests::built_in_ids_are_namespaced_and_bare_aliases_still_resolve ... ok
+test tests::a_probe_sets_only_declared_knobs_of_a_shader ... ok
+test tests::every_built_in_package_loads_and_its_fixtures_pass ... ok
+test tests::every_ffmpeg_package_pins_its_default_and_every_slider_bound ... ok
+test tests::every_scene_linear_package_probes_its_default_and_every_slider_bound ... ok
+test tests::package_folders_lists_only_folders_with_a_manifest ... ok
+test tests::stacked_filters_join_with_commas_in_applied_order ... ok
+test tests::stray_parameter_keys_are_dropped_and_missing_ones_default ... ok
+test tests::check_folder_names_every_fault ... ok
+test tests::the_stamp_moves_with_the_folder_and_only_then ... ok
+test tests::unknown_ids_and_wrong_kinds_are_skipped ... ok
+
+test result: ok. 72 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.69s
+

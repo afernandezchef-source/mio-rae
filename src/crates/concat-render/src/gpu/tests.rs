@@ -1604,6 +1604,84 @@ fn treated(
     out
 }
 
+/// Suppress measured noise without washing out a sharp edge or changing alpha.
+#[test]
+fn grain_reduction_lowers_noise_preserves_edges_alpha_and_zero_strength() {
+    let Some(mut gpu) = heavy_gpu() else { return };
+    let package = concat_effects::Catalogue::builtin()
+        .get("editpop.grain-reduction")
+        .expect("built-in grain reduction");
+    for probe in &package.probes {
+        let pass = package.probe_pass(probe).expect("a shader probe");
+        let color = gpu
+            .probe(&[pass], probe.input, 8, 0.0)
+            .expect("GPU readback");
+        assert!(
+            probe.check(color).is_ok(),
+            "grain color/alpha probe: {color:?}"
+        );
+    }
+    let size = (128, 64);
+    let mut seed = 42_u32;
+    let mut picture = Vec::new();
+    for y in 0..size.1 {
+        for x in 0..size.0 {
+            let base = if x < size.0 / 2 { 0.18 } else { 0.72 };
+            let mut pixel = [base, base, base, if y < 16 { 0.5 } else { 1.0 }];
+            for channel in &mut pixel[..3] {
+                seed = seed.wrapping_mul(1664525).wrapping_add(1013904223);
+                *channel += ((seed >> 8) as f32 / 16777215.0 - 0.5) * 0.08;
+            }
+            picture.push(pixel);
+        }
+    }
+    let default = package.pass(&BTreeMap::new(), None).expect("shader");
+    let got = treated(&mut gpu, size, &picture, &[default]);
+    let mut before = 0.0;
+    let mut after = 0.0;
+    let mut count = 0;
+    let mut edge_left = 0.0;
+    let mut edge_right = 0.0;
+    for y in 4..size.1 - 4 {
+        for x in 4..size.0 - 4 {
+            let index = (y * size.0 + x) as usize;
+            assert!((got[index][3] - picture[index][3]).abs() < 0.001);
+            let base = if x < size.0 / 2 { 0.18 } else { 0.72 };
+            if (x as i32 - size.0 as i32 / 2).abs() > 3 {
+                for channel in 0..3 {
+                    before += (picture[index][channel] - base).powi(2);
+                    after += (got[index][channel] - base).powi(2);
+                    count += 1;
+                }
+            }
+            if x == size.0 / 2 - 1 {
+                edge_left += got[index][0];
+            }
+            if x == size.0 / 2 {
+                edge_right += got[index][0];
+            }
+        }
+    }
+    let ratio = (after / before).sqrt();
+    eprintln!("grain noise RMS ratio: {ratio}; samples: {count}");
+    assert!(ratio < 0.8, "noise was not reduced: {ratio}");
+    assert!(
+        (edge_right - edge_left) / (size.1 - 8) as f32 > 0.50,
+        "edge was blurred"
+    );
+    let zero = package
+        .pass(&BTreeMap::from([("strength".into(), 0.0)]), None)
+        .unwrap();
+    let unchanged = treated(&mut gpu, size, &picture, &[zero]);
+    assert!(
+        unchanged
+            .iter()
+            .zip(&picture)
+            .all(|(a, b)| a.iter().zip(b).all(|(a, b)| (a - b).abs() < 0.0015)),
+        "zero strength must be identity"
+    );
+}
+
 /// A pass of a format 2 package drawn in several passes: `body` as its
 /// shader, `passes` its `[[wgsl.pass]]` tables, `params` its knobs, at
 /// `intensity`.

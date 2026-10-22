@@ -375,7 +375,6 @@ export component PhoneEditor inherits Rectangle {
         root.sheet-needs-clip = needs-clip;
     }
     function hide() {
-        if (root.sheet == "scene-cuts") { Editor.scene-cancel(); }
         root.sheet = "";
         root.sheet-needs-clip = false;
     }
@@ -1138,7 +1137,10 @@ export component PhoneEditor inherits Rectangle {
         height: root.height;
         open: root.sheet != "";
         title: root.sheet-title(root.sheet);
-        closed => { root.hide(); }
+        closed => {
+            if (root.sheet == "scene-cuts") { Editor.scene-cancel(); }
+            root.hide();
+        }
 
         if root.sheet == "scene-cuts": VerticalLayout {
             padding: 12px;
@@ -1176,7 +1178,7 @@ export component PhoneEditor inherits Rectangle {
             SheetButton {
                 glyph: Glyph.chevron-left;
                 label: Editor.scene-busy ? "Cancelar análisis" : "Descartar y cerrar";
-                clicked => { root.hide(); }
+                clicked => { Editor.scene-cancel(); root.hide(); }
             }
         }
 

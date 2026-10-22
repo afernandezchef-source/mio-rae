@@ -361,6 +361,37 @@ def scene_cuts_check():
     (OUT/'PASS-scene-cuts.json').write_text(json.dumps({'result':'PASS','scope':'Actual Android UI: local scene detection, discard, select, preview, apply, atomic undo/redo, save/reopen,1080p export; synthetic red/blue with flash; no physical Samsung test','actions':LOG},indent=2))
 
 
+def export_control_document(edited,field,name):
+    """Counterfactual export, same model/codec with only the target property off."""
+    im=Image.open(shot('audio-export-done'));w,h=im.size
+    tap(w*.93,h*.055)
+    tap(w*.055,h*.055)
+    rpc=Rpc()
+    control=copy.deepcopy(edited)
+    control['name']=name
+    for entries in [control['clips'],control['timelines'][0]['clips']]:
+        for clip in entries:
+            if field=='filters': clip[field]=[]
+            else: clip.pop(field,None)
+    path=WORK+'/'+name
+    rpc.call('project.create',location=WORK,name=name,video=edited['video'])
+    rpc.call('project.close',path=path,save=True)
+    run('adb','shell','cat > '+shlex.quote(path+'/concat.json'),data=json.dumps(control).encode())
+    rpc.call('project.open',path=path)
+    job=rpc.call('export.run',path=path,output=path+'/control.mp4',width=1920,height=1080,preset='ultrafast')['job']
+    deadline=time.monotonic()+300
+    while time.monotonic()<deadline:
+        state=rpc.call('export.status',job=job)
+        if state['state']!='running':
+            assert state['state']=='done',state
+            break
+        time.sleep(2)
+    else: raise AssertionError('Control export timed out')
+    rpc.call('project.close',path=path,save=False);rpc.close()
+    run('adb','pull',path+'/control.mp4',str(OUT/(name+'.mp4')))
+    return OUT/(name+'.mp4')
+
+
 def audio_cleanup_check():
     """Real noise switch, persistence, gallery export and matched codec control."""
     import array
@@ -388,38 +419,13 @@ def audio_cleanup_check():
     im=Image.open(shot('audio-noise-enabled'))
     tap(im.width*.5,im.height*.2)  # dismiss sheet
     restart()
-    click_label('AudioUI','audio-reopen')
+    click_label('^Audio','audio-reopen')
     time.sleep(3)
     assert document('audio-reopened',lambda d:bool(d['clips'][0].get('filters')))==edited
     ui_export_check()
     shutil=__import__('shutil')
     shutil.copy2(OUT/'ui-gallery-result.mp4',OUT/'audio-filtered.mp4')
-    # Close the real export panel and editor. Render a separate matched-codec
-    # control with ONLY the denoiser removed; never alter the edited document.
-    im=Image.open(shot('audio-export-done'));w,h=im.size
-    tap(w*.93,h*.055)
-    tap(w*.055,h*.055)
-    rpc=Rpc()
-    control=copy.deepcopy(edited)
-    control['name']='AudioControl'
-    for entries in [control['clips'],control['timelines'][0]['clips']]:
-        for clip in entries: clip['filters']=[]
-    path=WORK+'/AudioControl'
-    rpc.call('project.create',location=WORK,name='AudioControl',video=edited['video'])
-    rpc.call('project.close',path=path,save=True)
-    run('adb','shell','cat > '+shlex.quote(path+'/concat.json'),data=json.dumps(control).encode())
-    rpc.call('project.open',path=path)
-    job=rpc.call('export.run',path=path,output=path+'/control.mp4',width=1920,height=1080,preset='ultrafast')['job']
-    deadline=time.monotonic()+300
-    while time.monotonic()<deadline:
-        state=rpc.call('export.status',job=job)
-        if state['state']!='running':
-            assert state['state']=='done',state
-            break
-        time.sleep(2)
-    else: raise AssertionError('Audio control export timed out')
-    rpc.call('project.close',path=path,save=False);rpc.close()
-    run('adb','pull',path+'/control.mp4',str(OUT/'audio-control.mp4'))
+    control_file=export_control_document(edited,'filters','AudioControl')
     def measure(file,at):
         pcm=array.array('f')
         pcm.frombytes(run('ffmpeg','-v','error','-ss',str(at),'-i',str(file),
@@ -434,7 +440,7 @@ def audio_cleanup_check():
         return {'tone_amplitude':math.hypot(a,b),'residual_rms':residual,'peak':max(abs(v) for v in pcm)}
     measurements={}
     for at in [1,2.5]:
-        control=measure(OUT/'audio-control.mp4',at)
+        control=measure(control_file,at)
         filtered=measure(OUT/'audio-filtered.mp4',at)
         reduction=20*math.log10(control['residual_rms']/filtered['residual_rms'])
         tone_change=20*math.log10(filtered['tone_amplitude']/control['tone_amplitude'])
@@ -500,7 +506,7 @@ def main():
     rpc.call('project.close', path=PROJECT, save=True)
     rpc.close()
     restart()
-    click_label({'scene-cuts':'Escenas','audio-cleanup':'AudioUI'}.get(scenario,'Prueba'), '01-home')
+    click_label({'scene-cuts':'Escenas','audio-cleanup':'^Audio'}.get(scenario,'Prueba'), '01-home')
     time.sleep(3)
     if scenario=='ui-export':
         ui_export_check()

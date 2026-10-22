@@ -599,7 +599,7 @@ def main():
     # found on screen, not by an internal callback or edit command.
     for attempt in range(4):
         try:
-            click_label('ClipTest', f'02-editor-{attempt}', min_y=.55, max_y=.88)
+            click_label('Clip', f'02-editor-{attempt}', min_y=.55, max_y=.88)
             break
         except AssertionError:
             w, h = Image.open(OUT/f'02-editor-{attempt}.png').size

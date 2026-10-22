@@ -27,6 +27,7 @@ pub mod edit_targets;
 pub mod editor;
 pub mod model;
 pub mod placement;
+pub mod scene_cuts;
 pub mod speed;
 pub mod srt;
 
@@ -107,6 +108,73 @@ mod tests {
             rate_num: 30,
             rate_den: 1,
         }
+    }
+
+    #[test]
+    fn reviewed_scene_cuts_preserve_source_and_round_trip_as_one_undo() {
+        let (mut editor, _, clip_id) = fixture();
+        editor
+            .apply(Command::UpdateClip {
+                clip_id: clip_id.clone(),
+                patch: ClipPatch {
+                    opacity: Some(0.7),
+                    ..Default::default()
+                },
+            })
+            .unwrap();
+        editor
+            .apply(Command::TrimClip {
+                clip_id: clip_id.clone(),
+                edge: TrimEdge::Start,
+                delta: 1.0,
+                ripple: false,
+            })
+            .unwrap();
+        editor
+            .apply(Command::SetClipSpeed {
+                clip_id: clip_id.clone(),
+                speed: 2.0,
+                ripple: false,
+            })
+            .unwrap();
+        let before = editor.project().clone();
+        let clip = before
+            .active()
+            .clips
+            .iter()
+            .find(|c| c.id == clip_id)
+            .unwrap();
+        let start = clip.start;
+        let command = crate::scene_cuts::split_command(
+            &clip_id,
+            start,
+            clip.duration,
+            &[start + 1.0, start + 2.0],
+        )
+        .unwrap();
+        editor.apply(command).unwrap();
+        let after = editor.project().clone();
+        let clips = &after.active().clips;
+        assert_eq!(clips.len(), before.active().clips.len() + 2);
+        let pieces: Vec<_> = clips
+            .iter()
+            .filter(|c| c.media_id == clip.media_id)
+            .collect();
+        assert_eq!(pieces.len(), 3);
+        for piece in pieces {
+            assert!((piece.source_start - (1.0 + (piece.start - start) * 2.0)).abs() < 1e-9);
+            assert_eq!(piece.opacity, 0.7);
+        }
+        assert_eq!(
+            Editor::from_document(&editor.to_document(&settings()))
+                .unwrap()
+                .project(),
+            &after
+        );
+        assert!(editor.undo());
+        assert_eq!(editor.project(), &before);
+        assert!(editor.redo());
+        assert_eq!(editor.project(), &after);
     }
 
     /// Over JSON a null crop takes the crop off, as the patch documents:

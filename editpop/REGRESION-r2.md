@@ -77,3 +77,23 @@ La prueba nueva usa proyecto1080p, exige BT709 en todos los campos y rangoTV,
 reduce el umbral de error medio a4/255 y exige mayor parecido al resultado
 editado que al control. También exporta el mismo documento editado desde los
 botones de la app a galería. No hay validación física de SamsungS26.
+
+## Resultado final de la corrección de color
+
+ARM4efc27da401bc2ba970744890d4b84cbaf2698fd, run39688535227:compilación
+y estructuraPASS. x869e9606c10cf287a7fc6f8b43bf8299dc6a38d2ba, run39688535246:
+PASS completo. Ambos árboles fuente son idénticos. El proyecto se creó a1080p,
+se dividió por UI, se aplicaron Pixelate y Dissolve, se guardó/reabrió y se
+exportó el mismo documento por API y por los botones reales.
+
+Ambos MP4: H264/AAC1920x1080,30fps,120frames,4s, primarias/transferencia/matriz
+BT709 y rangoTV. MediaStore confirmó Movies/EditPop/PruebaUI.mp4, is_pending0.
+Decodificación estricta y señal440Hz en1sy3s verificadas localmente en ambos.
+Error medio exportación/visor: Pixelate2.926/255, Dissolve2.729/255; el archivo
+se parece más al resultado editado que al control sin efecto/transición. No se
+presenta igualdad de píxeles con H264 con pérdidas ni prueba física Samsung.
+
+APK final firmada con clave persistente de r1:90.367.095bytes,
+SHA256 0d7c93ac01f2eac274522477e44ae0a50aeeed742c2e707982e1df81d0c44e5f.
+Fuente exacta ZIP SHA25640d710de46c45004785cf05402650cb52d786e2ae78e1a99081c5eb6a09752bd.
+12entradas ZIP sin firma idénticas al binario deCI; firmaV2/V3 y4ELF16KiB PASS.

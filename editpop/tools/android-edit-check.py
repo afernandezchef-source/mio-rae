@@ -26,7 +26,7 @@ OUT.mkdir(parents=True, exist_ok=True)
 ROOT = f'/data/user/0/{PKG}/files'
 WORK = f'/sdcard/Android/data/{PKG}/files/checks'
 SCENARIO = os.environ.get('EDITPOP_TEST_SCENARIO', 'full')
-PROJECT_NAME = 'EscenasUI' if SCENARIO == 'scene-cuts' else 'PruebaUI'
+PROJECT_NAME = {'scene-cuts':'EscenasUI','audio-cleanup':'AudioUI'}.get(SCENARIO,'PruebaUI')
 PROJECT = WORK + '/' + PROJECT_NAME
 FIXTURE = ROOT + '/checks/ClipTest.mp4'
 LOG = []
@@ -361,6 +361,90 @@ def scene_cuts_check():
     (OUT/'PASS-scene-cuts.json').write_text(json.dumps({'result':'PASS','scope':'Actual Android UI: local scene detection, discard, select, preview, apply, atomic undo/redo, save/reopen,1080p export; synthetic red/blue with flash; no physical Samsung test','actions':LOG},indent=2))
 
 
+def audio_cleanup_check():
+    """Real noise switch, persistence, gallery export and matched codec control."""
+    import array
+    import math
+    before=document('audio-before',lambda d:len(d.get('clips',[]))==1)
+    toolbar('^Audio$', 'audio-open')
+    for attempt in range(8):
+        try:
+            _,y=find('Reducir','audio-noise-row-'+str(attempt),min_y=.45,max_y=.90)
+            im=Image.open(OUT/('audio-noise-row-'+str(attempt)+'.png'))
+            tap(im.width*.92,y)  # actual switch at the right of this label
+            break
+        except AssertionError:
+            im=Image.open(shot('audio-scroll-'+str(attempt)))
+            shell('input','swipe',str(int(im.width*.65)),str(int(im.height*.85)),
+                  str(int(im.width*.65)),str(int(im.height*.55)),'550')
+            time.sleep(1)
+    else:
+        raise AssertionError('Reduce noise control not reachable')
+    edited=document('audio-filter-enabled',lambda d:any(
+        any(f['id']=='concat.denoise' and f.get('enabled',True) for f in c.get('filters',[]))
+        for c in d.get('clips',[])))
+    filters=edited['clips'][0]['filters']
+    assert len(filters)==1 and abs(edited['clips'][0]['volume']-1)<1e-9
+    im=Image.open(shot('audio-noise-enabled'))
+    tap(im.width*.5,im.height*.2)  # dismiss sheet
+    restart()
+    click_label('AudioUI','audio-reopen')
+    time.sleep(3)
+    assert document('audio-reopened',lambda d:bool(d['clips'][0].get('filters')))==edited
+    ui_export_check()
+    shutil=__import__('shutil')
+    shutil.copy2(OUT/'ui-gallery-result.mp4',OUT/'audio-filtered.mp4')
+    # Close the real export panel and editor. Render a separate matched-codec
+    # control with ONLY the denoiser removed; never alter the edited document.
+    im=Image.open(shot('audio-export-done'));w,h=im.size
+    tap(w*.93,h*.055)
+    tap(w*.055,h*.055)
+    rpc=Rpc()
+    control=copy.deepcopy(edited)
+    control['name']='AudioControl'
+    for entries in [control['clips'],control['timelines'][0]['clips']]:
+        for clip in entries: clip['filters']=[]
+    path=WORK+'/AudioControl'
+    rpc.call('project.create',location=WORK,name='AudioControl',video=edited['video'])
+    rpc.call('project.close',path=path,save=True)
+    run('adb','shell','cat > '+shlex.quote(path+'/concat.json'),data=json.dumps(control).encode())
+    rpc.call('project.open',path=path)
+    job=rpc.call('export.run',path=path,output=path+'/control.mp4',width=1920,height=1080,preset='ultrafast')['job']
+    deadline=time.monotonic()+300
+    while time.monotonic()<deadline:
+        state=rpc.call('export.status',job=job)
+        if state['state']!='running':
+            assert state['state']=='done',state
+            break
+        time.sleep(2)
+    else: raise AssertionError('Audio control export timed out')
+    rpc.call('project.close',path=path,save=False);rpc.close()
+    run('adb','pull',path+'/control.mp4',str(OUT/'audio-control.mp4'))
+    def measure(file,at):
+        pcm=array.array('f')
+        pcm.frombytes(run('ffmpeg','-v','error','-ss',str(at),'-i',str(file),
+                          '-t','1','-ac','1','-ar','48000','-f','f32le','-'))
+        assert len(pcm)>=47000
+        n=len(pcm);dc=sum(pcm)/n
+        sine=[math.sin(2*math.pi*440*i/48000) for i in range(n)]
+        cosine=[math.cos(2*math.pi*440*i/48000) for i in range(n)]
+        a=2*sum((v-dc)*x for v,x in zip(pcm,sine))/n
+        b=2*sum((v-dc)*x for v,x in zip(pcm,cosine))/n
+        residual=math.sqrt(sum((v-dc-a*x-b*y)**2 for v,x,y in zip(pcm,sine,cosine))/n)
+        return {'tone_amplitude':math.hypot(a,b),'residual_rms':residual,'peak':max(abs(v) for v in pcm)}
+    measurements={}
+    for at in [1,2.5]:
+        control=measure(OUT/'audio-control.mp4',at)
+        filtered=measure(OUT/'audio-filtered.mp4',at)
+        reduction=20*math.log10(control['residual_rms']/filtered['residual_rms'])
+        tone_change=20*math.log10(filtered['tone_amplitude']/control['tone_amplitude'])
+        assert reduction>=6,(at,reduction,control,filtered)
+        assert abs(tone_change)<1.5 and filtered['peak']<.98,(at,tone_change,filtered)
+        measurements[str(at)]={'control':control,'filtered':filtered,'residual_reduction_db':reduction,'tone_change_db':tone_change}
+    (OUT/'audio-cleanup-measurements.json').write_text(json.dumps(measurements,indent=2))
+    (OUT/'PASS-audio-cleanup.json').write_text(json.dumps({'result':'PASS','scope':'Android30 actual Reduce noise switch, save/reopen, UI1080p export; matched Android export without filter; stationary synthetic noise and440Hz tone, not real voice or Samsung','measurements':measurements,'actions':LOG},indent=2))
+
+
 def main():
     assert shell('getprop','ro.kernel.qemu') == '1', 'This script is for test emulators, not physical phones'
     # Restarting adbd can close its transport before the client gets an exit
@@ -388,7 +472,14 @@ def main():
     fixture = OUT / 'ClipTest.mp4'
     source = 'color=red:s=180x320:r=30:d=4' if SCENARIO=='scene-cuts' else 'testsrc2=s=320x180:r=30:d=4'
     extra = ['-vf', "drawbox=c=blue:t=fill:enable='gte(t,2)',drawbox=c=white:t=fill:enable='between(t,0.5,0.55)'"] if SCENARIO=='scene-cuts' else []
-    run('ffmpeg', '-y', '-v', 'error', '-f', 'lavfi', '-i', source, '-f', 'lavfi', '-i', 'sine=frequency=440:sample_rate=48000:duration=4', *extra, '-c:v', 'libx264', '-pix_fmt', 'yuv420p', '-c:a', 'aac', '-shortest', str(fixture))
+    if SCENARIO=='audio-cleanup':
+        run('ffmpeg','-y','-v','error','-f','lavfi','-i',source,
+            '-f','lavfi','-i','aevalsrc=0.1*sin(2*PI*440*t):s=48000:d=4',
+            '-f','lavfi','-i','anoisesrc=c=white:a=0.02:r=48000:d=4:s=123456',
+            '-filter_complex','[1:a][2:a]amix=inputs=2:normalize=0[a]',
+            '-map','0:v','-map','[a]','-c:v','libx264','-pix_fmt','yuv420p','-c:a','aac','-shortest',str(fixture))
+    else:
+        run('ffmpeg', '-y', '-v', 'error', '-f', 'lavfi', '-i', source, '-f', 'lavfi', '-i', 'sine=frequency=440:sample_rate=48000:duration=4', *extra, '-c:v', 'libx264', '-pix_fmt', 'yuv420p', '-c:a', 'aac', '-shortest', str(fixture))
     run('adb', 'push', str(fixture), FIXTURE)
     # Root-written files must belong to the application before it writes recents/settings.
     uid = shell('stat', '-c', '%u', ROOT)
@@ -398,7 +489,7 @@ def main():
     run('adb', 'forward', 'tcp:7420', 'tcp:7420')
     rpc = Rpc()
     scenario = os.environ.get('EDITPOP_TEST_SCENARIO','full')
-    assert scenario in ('full','ui-export','scene-cuts'), scenario
+    assert scenario in ('full','ui-export','scene-cuts','audio-cleanup'), scenario
     width,height = 1920,1080
     rpc.call('project.create', location=WORK, name=PROJECT_NAME, video={'width':width,'height':height,'rateNum':30,'rateDen':1})
     imported = rpc.call('media.import', path=PROJECT, file=FIXTURE)
@@ -409,7 +500,7 @@ def main():
     rpc.call('project.close', path=PROJECT, save=True)
     rpc.close()
     restart()
-    click_label('Escenas' if scenario=='scene-cuts' else 'Prueba', '01-home')
+    click_label({'scene-cuts':'Escenas','audio-cleanup':'AudioUI'}.get(scenario,'Prueba'), '01-home')
     time.sleep(3)
     if scenario=='ui-export':
         ui_export_check()
@@ -428,6 +519,9 @@ def main():
         raise AssertionError('Imported clip is not reachable on the timeline')
     if scenario=='scene-cuts':
         scene_cuts_check()
+        return
+    if scenario=='audio-cleanup':
+        audio_cleanup_check()
         return
     toolbar('Dividir', '03-split')
     d = document('04-split', lambda d: len(d.get('clips', [])) == 2)

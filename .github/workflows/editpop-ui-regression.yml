@@ -9,8 +9,8 @@ on:
       scenario:
         description: Test full editing or the actual Export buttons and gallery
         type: choice
-        options: [scene-cuts, ui-export, full]
-        default: scene-cuts
+        options: [audio-cleanup, scene-cuts, ui-export, full]
+        default: audio-cleanup
   push:
     branches: [editpop/concat-ui-regression]
 permissions:
@@ -22,7 +22,7 @@ jobs:
     timeout-minutes: 40
     env:
       APK_RUN_ID: ${{ inputs.apk_run_id || '39770421244' }}
-      EDITPOP_TEST_SCENARIO: ${{ inputs.scenario || 'scene-cuts' }}
+      EDITPOP_TEST_SCENARIO: ${{ inputs.scenario || 'audio-cleanup' }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:

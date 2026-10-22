@@ -34,7 +34,19 @@ import {
 // A global has no such arithmetic. Rust binds it once, any number of instances
 // read it, and a seat is then only a box with a name in it — see Seat, which
 // is the whole of what forwarding is left.
+export struct SceneCutData { label: string, chosen: bool }
+
 export global Editor {
+    in-out property <[SceneCutData]> scene-cuts;
+    in-out property <bool> scene-busy;
+    in-out property <bool> scene-can-apply;
+    in-out property <int> scene-progress;
+    in-out property <string> scene-message;
+    callback scene-start();
+    callback scene-cancel();
+    callback scene-toggle(index: int);
+    callback scene-preview(index: int);
+    callback scene-apply();
     // ── the layout ───────────────────────────────────────────────────────
     //
     // The arrangement is a tree and it lives in Rust; see dock.slint. These

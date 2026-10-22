@@ -10,6 +10,7 @@ use concat_core::frame::{Depth, Frame, Signal};
 use concat_core::time::FrameRate;
 use ffmpeg_the_third as ffmpeg;
 use ffmpeg_the_third::codec::encoder;
+use ffmpeg_the_third::codec::packet::Mut as _;
 use ffmpeg_the_third::format::{self, Pixel};
 use ffmpeg_the_third::software::scaling;
 use ffmpeg_the_third::util::frame::video::Video;
@@ -906,6 +907,7 @@ pub struct Encoder {
     path: PathBuf,
     output: format::context::Output,
     encoder: encoder::video::Encoder,
+    packet_tags: Option<PacketTags>,
     scaler: scaling::Context,
     /// The encoder's time base, and the stream's after the header was
     /// written - the muxer is free to pick its own.
@@ -926,6 +928,124 @@ pub struct Encoder {
     /// A PQ file's light, measured as it is written, for the metadata the
     /// file carries once it is finished.
     light: Option<LightLevel>,
+}
+
+/// MediaCodec may ignore color aspects and emit reserved/GBR VUI values.
+/// Repair the encoded headers with FFmpeg's existing metadata filters;
+/// this does not decode or recompress the picture. Both selected filters
+/// return exactly one packet per input and preserve its timestamps.
+struct PacketTags {
+    context: std::ptr::NonNull<ffmpeg::sys::AVBSFContext>,
+    path: PathBuf,
+}
+
+// SAFETY: the context is exclusively owned, has no thread affinity, and
+// is accessed only through mutable methods. Like the codec it may move,
+// but is never shared between threads.
+unsafe impl Send for PacketTags {}
+
+impl PacketTags {
+    fn new(
+        encoder: &encoder::video::Encoder,
+        codec: VideoCodec,
+        time_base: ffmpeg::Rational,
+        full: bool,
+        path: &Path,
+    ) -> Result<Self> {
+        let name = match codec {
+            VideoCodec::H264 => c"h264_metadata",
+            VideoCodec::Hevc => c"hevc_metadata",
+            VideoCodec::Av1 => unreachable!("only H.264 and HEVC have this filter"),
+        };
+        // SAFETY: static terminated names; allocation returns a new, owned
+        // context. The encoder remains live for every parameter read.
+        let filter = unsafe { ffmpeg::sys::av_bsf_get_by_name(name.as_ptr()) };
+        if filter.is_null() {
+            return Err(Error::Missing {
+                what: "bitstream filter",
+                name: name.to_string_lossy().into_owned(),
+            });
+        }
+        let mut raw = std::ptr::null_mut();
+        let allocated = unsafe { ffmpeg::sys::av_bsf_alloc(filter, &mut raw) };
+        if allocated < 0 {
+            return Err(ffi::fail(
+                "allocate encoded color filter",
+                path,
+                ffmpeg::Error::from(allocated),
+            ));
+        }
+        let context = std::ptr::NonNull::new(raw).ok_or_else(|| Error::Ffi {
+            operation: "allocate encoded color filter",
+            path: path.to_path_buf(),
+            detail: "FFmpeg returned no context".to_owned(),
+        })?;
+        let tags = Self {
+            context,
+            path: path.to_path_buf(),
+        };
+        // SAFETY: both contexts are live and owned; FFmpeg copies the
+        // parameters into its allocated par_in, and options are integers.
+        unsafe {
+            tags.check(ffmpeg::sys::avcodec_parameters_from_context(
+                (*raw).par_in,
+                encoder.as_ptr(),
+            ))?;
+            (*raw).time_base_in = time_base.into();
+            let encoded = &*encoder.as_ptr();
+            for (key, value) in [
+                (c"colour_primaries", i64::from(encoded.color_primaries.0)),
+                (c"transfer_characteristics", i64::from(encoded.color_trc.0)),
+                (c"matrix_coefficients", i64::from(encoded.colorspace.0)),
+                (c"video_full_range_flag", i64::from(full)),
+            ] {
+                tags.check(ffmpeg::sys::av_opt_set_int(
+                    (*raw).priv_data,
+                    key.as_ptr(),
+                    value,
+                    0,
+                ))?;
+            }
+            tags.check(ffmpeg::sys::av_bsf_init(raw))?;
+        }
+        Ok(tags)
+    }
+
+    fn check(&self, code: i32) -> Result<()> {
+        if code < 0 {
+            Err(ffi::fail(
+                "tag encoded color",
+                &self.path,
+                ffmpeg::Error::from(code),
+            ))
+        } else {
+            Ok(())
+        }
+    }
+
+    fn rewrite(&mut self, packet: &mut ffmpeg::Packet) -> Result<()> {
+        // SAFETY: the filter and packet are exclusively borrowed. A
+        // successful send consumes the packet reference; receive fills
+        // that now-empty packet with the single rewritten result.
+        unsafe {
+            self.check(ffmpeg::sys::av_bsf_send_packet(
+                self.context.as_ptr(),
+                packet.as_mut_ptr(),
+            ))?;
+            self.check(ffmpeg::sys::av_bsf_receive_packet(
+                self.context.as_ptr(),
+                packet.as_mut_ptr(),
+            ))
+        }
+    }
+}
+
+impl Drop for PacketTags {
+    fn drop(&mut self) {
+        let mut raw = self.context.as_ptr();
+        // SAFETY: this is the sole owner and the context is freed once.
+        unsafe { ffmpeg::sys::av_bsf_free(&mut raw) };
+    }
 }
 
 /// The mastering display an HDR10 file names: a P3 display of 1000 nits
@@ -1242,8 +1362,33 @@ impl Encoder {
                 }
             }
         }
-        let Some((encoder_name, codec, encoder, pixel_format)) = opened else {
+        let Some((encoder_name, codec, mut encoder, pixel_format)) = opened else {
             return Err(failure.expect("at least one encoder was tried"));
+        };
+
+        // A platform encoder can replace the requested context tags with
+        // zeros when it ignores color aspects. Keep the container, scaler
+        // and encoded VUI in agreement with the frames we actually supply.
+        let (primaries, transfer, matrix) = tags;
+        encoder.set_colorspace(matrix);
+        encoder.set_color_range(options.color_range.as_ffmpeg());
+        // SAFETY: an owned live codec context; these are plain color fields.
+        unsafe {
+            (*encoder.as_mut_ptr()).color_primaries = primaries.into();
+            (*encoder.as_mut_ptr()).color_trc = transfer.into();
+        }
+        let packet_tags = if Family::of(encoder_name) == Family::MediaCodec
+            && matches!(options.codec, VideoCodec::H264 | VideoCodec::Hevc)
+        {
+            Some(PacketTags::new(
+                &encoder,
+                options.codec,
+                time_base,
+                options.color_range == ColorRange::Full,
+                path,
+            )?)
+        } else {
+            None
         };
 
         {
@@ -1332,6 +1477,7 @@ impl Encoder {
             path: path.to_path_buf(),
             output,
             encoder,
+            packet_tags,
             scaler,
             encoder_time_base: time_base,
             stream_time_base,
@@ -1428,6 +1574,9 @@ impl Encoder {
             let mut packet = ffmpeg::Packet::empty();
             match self.encoder.receive_packet(&mut packet) {
                 Ok(()) => {
+                    if let Some(tags) = &mut self.packet_tags {
+                        tags.rewrite(&mut packet)?;
+                    }
                     // One frame, in the encoder's own time base - unset,
                     // this defaults to zero, and a muxer that never hears a
                     // packet's duration falls back to inferring the stream's

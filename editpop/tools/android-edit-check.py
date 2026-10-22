@@ -25,7 +25,9 @@ OUT = Path(sys.argv[1] if len(sys.argv) > 1 else 'android-edit-check')
 OUT.mkdir(parents=True, exist_ok=True)
 ROOT = f'/data/user/0/{PKG}/files'
 WORK = f'/sdcard/Android/data/{PKG}/files/checks'
-PROJECT = WORK + '/PruebaUI'
+SCENARIO = os.environ.get('EDITPOP_TEST_SCENARIO', 'full')
+PROJECT_NAME = 'EscenasUI' if SCENARIO == 'scene-cuts' else 'PruebaUI'
+PROJECT = WORK + '/' + PROJECT_NAME
 FIXTURE = ROOT + '/checks/ClipTest.mp4'
 LOG = []
 
@@ -217,11 +219,125 @@ def ui_export_check():
     (OUT/'ui-export-probe.json').write_text(json.dumps(probe,indent=2))
     video = next(stream for stream in probe['streams'] if stream['codec_type']=='video')
     assert (video['width'],video['height'])==(1920,1080),probe
+    assert all(video.get(k)=='bt709' for k in ('color_space','color_transfer','color_primaries')),video
+    assert video.get('color_range')=='tv',video
     assert abs(float(probe['format']['duration'])-4)<.1,probe
     assert any(stream['codec_type']=='audio' for stream in probe['streams']),probe
     run('ffmpeg','-xerror','-v','error','-i',str(exported),'-f','null','-')
     shot('ui-export-published')
-    (OUT/'PASS-ui-export.json').write_text(json.dumps({'result':'PASS','scope':'Real UI Export buttons, H264/AAC1080p and completed MediaStore publication; one synthetic clip; no Samsung test','actions':LOG},indent=2))
+    (OUT/'PASS-ui-export.json').write_text(json.dumps({'result':'PASS','scope':'Real UI Export buttons, H264/AAC1080p and completed MediaStore publication; synthetic project; no Samsung test','actions':LOG},indent=2))
+
+
+def transport_tap(label):
+    """Tap the real transport control; no editor API or keyboard substitution."""
+    import xml.etree.ElementTree as ET
+    nodes = []
+    try:
+        shell('uiautomator', 'dump', '/sdcard/editpop-window.xml')
+        raw = run('adb', 'exec-out', 'cat', '/sdcard/editpop-window.xml')
+        (OUT/(label+'-accessibility.xml')).write_bytes(raw)
+        nodes = list(ET.fromstring(raw).iter('node'))
+    except (sp.SubprocessError, ET.ParseError):
+        pass
+    for node in nodes:
+        if label.lower() in (node.get('content-desc','').lower(), node.get('text','').lower()):
+            bounds = [int(v) for v in re.findall(r'\d+',node.get('bounds',''))]
+            if len(bounds)==4 and bounds[2]>bounds[0] and bounds[3]>bounds[1]:
+                LOG.append({'accessible tap':label,'bounds':bounds})
+                tap((bounds[0]+bounds[2])/2,(bounds[1]+bounds[3])/2)
+                return
+    # Slint's NativeActivity may expose no virtual accessibility nodes. On this
+    # fixed API30/Pixel6 profile, locate the actual enabled white transport icon.
+    # The saved document assertion afterwards must prove the button took effect.
+    assert label in ('Deshacer','Rehacer')
+    im = Image.open(shot(label+'-transport')).convert('RGB')
+    w,h = im.size
+    left,right = (.83,.89) if label=='Deshacer' else (.92,.97)
+    x0,y0,x1,y1 = int(w*left),int(h*.53),int(w*right),int(h*.59)
+    region = im.crop((x0,y0,x1,y1))
+    mask = Image.new('L',region.size)
+    mask.putdata([255 if min(r,g,b)>170 else 0 for r,g,b in region.getdata()])
+    box = mask.getbbox()
+    assert box and sum(v>0 for v in mask.getdata())>25, f'No enabled visible {label} icon'
+    a,b,c,d=box
+    LOG.append({'tap':label,'method':'visible enabled transport icon on fixed emulator','bounds':[x0+a,y0+b,x0+c,y0+d]})
+    tap(x0+(a+c)/2,y0+(b+d)/2)
+
+
+def scene_cuts_check():
+    before = document('scene-before', lambda d:len(d.get('clips',[]))==1)
+    toolbar('Sugerir', 'scene-open')
+    deadline = time.monotonic()+90
+    while True:
+        rows = words('scene-review',region=(.4,.96),contrast='gray')
+        if any(re.search('marcados',r['text'],re.I) for r in rows) and any('00:02' in r['text'] for r in rows):
+            break
+        assert time.monotonic()<deadline, 'No scene proposal at2s'
+        time.sleep(1)
+    assert document('scene-unmodified',lambda d:len(d.get('clips',[]))==1)==before
+    click_label('Descartar','scene-discard',min_y=.4)
+    assert document('scene-discarded',lambda d:len(d.get('clips',[]))==1)==before
+    toolbar('Sugerir', 'scene-open-again')
+    deadline = time.monotonic()+90
+    while True:
+        try:
+            click_label('00:02', 'scene-select-proposal',min_y=.4)
+            break
+        except AssertionError:
+            assert time.monotonic()<deadline
+            time.sleep(1)
+    rows = words('scene-preview-button',region=(.4,.96),contrast='gray')
+    matches = [r for r in rows if re.fullmatch('Ver',r['text'],re.I)]
+    assert matches, 'No preview button'
+    # The instructions also say Ver: choose the button at the right of the row.
+    button = max(matches,key=lambda r:int(r['left']))
+    LOG.append({'tap':'Ver button on proposal row'})
+    tap(int(button['left'])+int(button['width'])/2,int(button['top'])+int(button['height'])/2)
+    deadline = time.monotonic()+20
+    while True:
+        picture = Image.open(shot('scene-preview-visible')).convert('RGB')
+        red,green,blue = picture.getpixel((picture.width//2,int(picture.height*.22)))
+        if blue>red+80 and blue>green+80:
+            break
+        assert time.monotonic()<deadline, ('Preview did not reach blue scene',red,green,blue)
+        time.sleep(1)
+    click_label('Aplicar','scene-apply',min_y=.4)
+    edited = document('scene-applied',lambda d:len(d.get('clips',[]))==2)
+    clips = sorted(edited['clips'],key=lambda c:c['start'])
+    assert abs(clips[1]['start']-2)<1/30+.001, clips
+    assert abs(sum(c['duration'] for c in clips)-4)<.001
+    transport_tap('Deshacer')
+    assert document('scene-undone',lambda d:len(d.get('clips',[]))==1)==before
+    transport_tap('Rehacer')
+    assert document('scene-redone',lambda d:len(d.get('clips',[]))==2)==edited
+    restart()
+    click_label('Escenas','scene-reopen')
+    time.sleep(3)
+    assert document('scene-reopened',lambda d:len(d.get('clips',[]))==2)==edited
+    # Remove the prior full-regression export so publication must be new.
+    shell('content','delete','--uri','content://media/external/video/media')
+    ui_export_check()
+    # Check the actual encoded image and sound, not only container metadata.
+    import array
+    import math
+    measurements = {}
+    for second, channel in [(1,0),(3,2)]:
+        rgb = run('ffmpeg','-v','error','-ss',str(second),'-i',str(OUT/'ui-gallery-result.mp4'),
+                  '-vf','crop=2:2:(iw-2)/2:(ih-2)/2,scale=1:1','-frames:v','1','-pix_fmt','rgb24','-f','rawvideo','-')
+        assert len(rgb)==3, rgb
+        assert rgb[channel]>150 and rgb[channel]-rgb[2-channel]>100, list(rgb)
+        pcm = array.array('f')
+        pcm.frombytes(run('ffmpeg','-v','error','-ss',str(second),'-i',str(OUT/'ui-gallery-result.mp4'),
+                          '-t','0.25','-ac','1','-ar','48000','-f','f32le','-'))
+        assert len(pcm)>1000
+        rms = math.sqrt(sum(v*v for v in pcm)/len(pcm))
+        real = sum(v*math.cos(2*math.pi*440*i/48000) for i,v in enumerate(pcm))
+        imag = sum(v*math.sin(2*math.pi*440*i/48000) for i,v in enumerate(pcm))
+        tone = 2*math.hypot(real,imag)/len(pcm)
+        assert rms>.02 and tone>.05, (rms,tone)
+        measurements[str(second)]={'center_rgb':list(rgb),'audio_rms':rms,'tone_440Hz_amplitude':tone}
+    (OUT/'scene-export-measurements.json').write_text(json.dumps(measurements,indent=2))
+    (OUT/'PASS-scene-cuts.json').write_text(json.dumps({'result':'PASS','scope':'Actual Android UI: local scene detection, discard, select, preview, apply, atomic undo/redo, save/reopen,1080p export; synthetic red/blue with flash; no physical Samsung test','actions':LOG},indent=2))
 
 
 def main():
@@ -235,7 +351,9 @@ def main():
     prefs = {'locale':'es', 'accent':'coral', 'server':{'enabled':True,'listen':'127.0.0.1:7420','token':TEST_TOKEN}}
     run('adb', 'shell', f'cat > {shlex.quote(config+"/settings.json")}', data=json.dumps(prefs).encode())
     fixture = OUT / 'ClipTest.mp4'
-    run('ffmpeg', '-y', '-v', 'error', '-f', 'lavfi', '-i', 'testsrc2=s=320x180:r=30:d=4', '-f', 'lavfi', '-i', 'sine=frequency=440:sample_rate=48000:duration=4', '-c:v', 'libx264', '-pix_fmt', 'yuv420p', '-c:a', 'aac', '-shortest', str(fixture))
+    source = 'color=red:s=180x320:r=30:d=4' if SCENARIO=='scene-cuts' else 'testsrc2=s=320x180:r=30:d=4'
+    extra = ['-vf', "drawbox=c=blue:t=fill:enable='gte(t,2)',drawbox=c=white:t=fill:enable='between(t,0.5,0.55)'"] if SCENARIO=='scene-cuts' else []
+    run('ffmpeg', '-y', '-v', 'error', '-f', 'lavfi', '-i', source, '-f', 'lavfi', '-i', 'sine=frequency=440:sample_rate=48000:duration=4', *extra, '-c:v', 'libx264', '-pix_fmt', 'yuv420p', '-c:a', 'aac', '-shortest', str(fixture))
     run('adb', 'push', str(fixture), FIXTURE)
     # Root-written files must belong to the application before it writes recents/settings.
     uid = shell('stat', '-c', '%u', ROOT)
@@ -245,9 +363,9 @@ def main():
     run('adb', 'forward', 'tcp:7420', 'tcp:7420')
     rpc = Rpc()
     scenario = os.environ.get('EDITPOP_TEST_SCENARIO','full')
-    assert scenario in ('full','ui-export'), scenario
-    width,height = (1920,1080) if scenario=='ui-export' else (320,180)
-    rpc.call('project.create', location=WORK, name='PruebaUI', video={'width':width,'height':height,'rateNum':30,'rateDen':1})
+    assert scenario in ('full','ui-export','scene-cuts'), scenario
+    width,height = 1920,1080
+    rpc.call('project.create', location=WORK, name=PROJECT_NAME, video={'width':width,'height':height,'rateNum':30,'rateDen':1})
     imported = rpc.call('media.import', path=PROJECT, file=FIXTURE)
     project = imported['project']
     timeline = project['timelines'][0]
@@ -256,7 +374,7 @@ def main():
     rpc.call('project.close', path=PROJECT, save=True)
     rpc.close()
     restart()
-    click_label('Prueba', '01-home')
+    click_label('Escenas' if scenario=='scene-cuts' else 'Prueba', '01-home')
     time.sleep(3)
     if scenario=='ui-export':
         ui_export_check()
@@ -273,6 +391,9 @@ def main():
             time.sleep(1)
     else:
         raise AssertionError('Imported clip is not reachable on the timeline')
+    if scenario=='scene-cuts':
+        scene_cuts_check()
+        return
     toolbar('Dividir', '03-split')
     d = document('04-split', lambda d: len(d.get('clips', [])) == 2)
     clips = sorted(d['clips'], key=lambda c:c['start'])
@@ -378,6 +499,8 @@ def main():
     (OUT/'export-probe.json').write_text(json.dumps(probe,indent=2))
     video = next(s for s in probe['streams'] if s['codec_type']=='video')
     assert (video['width'],video['height'])==(1920,1080)
+    assert all(video.get(k)=='bt709' for k in ('color_space','color_transfer','color_primaries')),video
+    assert video.get('color_range')=='tv',video
     assert abs(float(probe['format']['duration'])-4)<.1
     assert any(s['codec_type']=='audio' for s in probe['streams'])
     run('ffmpeg','-xerror','-v','error','-i',str(OUT/'ui-result.mp4'),'-f','null','-')
@@ -392,9 +515,16 @@ def main():
         run('ffmpeg','-y','-v','error','-i',str(OUT/'ui-result.mp4'),'-ss',str(at),'-frames:v','1',str(frame))
         encoded = Image.open(frame).convert('RGB')
         scores[label+'_export_error'] = sum(ImageStat.Stat(ImageChops.difference(actual,encoded)).mean)/3
-        assert scores[label+'_export_error'] < 10, f'Preview/export disagree: {scores}'
+        assert scores[label+'_export_error'] < 4, f'Preview/export disagree: {scores}'
+        scores[label+'_export_vs_control_error'] = sum(ImageStat.Stat(ImageChops.difference(control,encoded)).mean)/3
+        assert scores[label+'_export_error'] < scores[label+'_export_vs_control_error'], f'Export closer to unedited control: {scores}'
     (OUT/'visual-verification.json').write_text(json.dumps(scores,indent=2))
-    (OUT/'PASS.json').write_text(json.dumps({'result':'PASS','scope':'real taps split, effect, transition; saved/reopened; same document exported via engine API at1080p; no Samsung test','actions':LOG},indent=2))
+    # Complete the same edited document through the user's Export buttons.
+    restart()
+    click_label('Prueba','ui-reopen-for-export')
+    time.sleep(3)
+    ui_export_check()
+    (OUT/'PASS.json').write_text(json.dumps({'result':'PASS','scope':'real taps split, effect, transition; saved/reopened; same document exported via engine API and real UI at1080p, BT709, completed gallery publication; no Samsung test','actions':LOG},indent=2))
 
 
 try:

@@ -1,0 +1,14 @@
+{
+  "scope": "Host FFmpeg7.1 synthetic stationary noise, not Android UI or real voice",
+  "filter": "afftdn=nf=-35.0:nr=21.0",
+  "input": {
+    "tone_amplitude": 0.10006894781997777,
+    "residual_rms": 0.011974261934881337
+  },
+  "output": {
+    "tone_amplitude": 0.1000226937365128,
+    "residual_rms": 0.0020734537039726383
+  },
+  "noise_reduction_db": 15.23108822276649,
+  "tone_change_db": -0.004015738671715848
+}

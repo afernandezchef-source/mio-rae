@@ -1,0 +1,18 @@
+{
+    "programs": [
+
+    ],
+    "stream_groups": [
+
+    ],
+    "streams": [
+        {
+            "codec_name": "h264",
+            "width": 1920,
+            "height": 1080,
+            "duration": "1.000000",
+            "nb_frames": "30",
+            "extradata_size": 40
+        }
+    ]
+}

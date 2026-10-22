@@ -363,9 +363,23 @@ def scene_cuts_check():
 
 def main():
     assert shell('getprop','ro.kernel.qemu') == '1', 'This script is for test emulators, not physical phones'
-    run('adb', 'root')
-    run('adb', 'wait-for-device')
-    assert shell('id').startswith('uid=0'), 'Rooted test emulator required; never modifies a real phone'
+    # Restarting adbd can close its transport before the client gets an exit
+    # status. Require a verified root shell after reconnecting, not root's exit.
+    rooted = False
+    for attempt in range(4):
+        result = sp.run(['adb','root'],stdout=sp.PIPE,stderr=sp.STDOUT,timeout=30)
+        with (OUT/'adb-root.log').open('ab') as trail:
+            trail.write(result.stdout)
+        run('adb', 'wait-for-device')
+        time.sleep(1)
+        try:
+            if shell('id').startswith('uid=0'):
+                rooted = True
+                break
+        except sp.SubprocessError:
+            pass
+        time.sleep(1)
+    assert rooted, 'Rooted test emulator required; never modifies a real phone'
     shell('am', 'force-stop', PKG)
     config = ROOT + '/app.concat.editor'
     shell('mkdir', '-p', config, WORK, ROOT + '/checks')
@@ -551,12 +565,15 @@ def main():
 try:
     main()
 except Exception:
-    shot('FAIL')
+    try:
+        shot('FAIL')
+    except sp.SubprocessError:
+        pass
     raise
 finally:
     (OUT/'actions.json').write_text(json.dumps(LOG,indent=2))
     # Capture stalled native threads before the runner shuts down the emulator.
-    pid = shell('pidof', PKG).split()
+    pid = run('adb','shell','pidof',PKG,check=False).decode().split()
     if pid:
         for label, command in [('threads', ['adb','shell','ps','-T','-p',pid[0]]), ('native-stack', ['adb','shell','debuggerd','-b',pid[0]]), ('export-files', ['adb','shell','ls','-laR',PROJECT])]:
             try:

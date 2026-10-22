@@ -26,7 +26,7 @@ OUT.mkdir(parents=True, exist_ok=True)
 ROOT = f'/data/user/0/{PKG}/files'
 WORK = f'/sdcard/Android/data/{PKG}/files/checks'
 SCENARIO = os.environ.get('EDITPOP_TEST_SCENARIO', 'full')
-PROJECT_NAME = {'scene-cuts':'EscenasUI','audio-cleanup':'AudioUI'}.get(SCENARIO,'PruebaUI')
+PROJECT_NAME = {'scene-cuts':'EscenasUI','audio-cleanup':'AudioUI','stabilization':'CamaraUI'}.get(SCENARIO,'PruebaUI')
 PROJECT = WORK + '/' + PROJECT_NAME
 FIXTURE = ROOT + '/checks/ClipTest.mp4'
 LOG = []
@@ -451,6 +451,75 @@ def audio_cleanup_check():
     (OUT/'PASS-audio-cleanup.json').write_text(json.dumps({'result':'PASS','scope':'Android30 actual Reduce noise switch, save/reopen, UI1080p export; matched Android export without filter; stationary synthetic noise and440Hz tone, not real voice or Samsung','measurements':measurements,'actions':LOG},indent=2))
 
 
+def stabilization_check():
+    """Actual stabilization switch; tracked motion, persistence and output jitter."""
+    import math
+    toolbar('^Editar$', 'stabilize-open')
+    for attempt in range(12):
+        try:
+            _,y=find('Estabilizar','stabilize-row-'+str(attempt),min_y=.44,max_y=.90)
+            im=Image.open(OUT/('stabilize-row-'+str(attempt)+'.png'))
+            tap(im.width*.06,y)  # actual checkbox BEFORE the section title
+            break
+        except AssertionError:
+            im=Image.open(shot('stabilize-scroll-'+str(attempt)))
+            shell('input','swipe',str(int(im.width*.65)),str(int(im.height*.85)),
+                  str(int(im.width*.65)),str(int(im.height*.55)),'550')
+            time.sleep(1)
+    else: raise AssertionError('Stabilize control not reachable')
+    edited=document('stabilize-enabled',lambda d:bool(d['clips'][0].get('stabilize')))
+    deadline=time.monotonic()+120
+    measured=[]
+    while time.monotonic()<deadline:
+        paths=run('adb','shell','find',PROJECT+'/cache/stabilize','-name','motion',check=False).decode().splitlines()
+        if paths and paths[0].startswith(PROJECT+'/'):
+            text=run('adb','exec-out','cat',paths[0]).decode()
+            (OUT/'stabilization-motion.txt').write_text(text)
+            measured=[line.split() for line in text.splitlines() if line.startswith('f ')]
+            coverage=[line.split() for line in text.splitlines() if line.startswith('covered ')]
+            if len(measured)>=115 and any(float(line[2])>=4 for line in coverage): break
+        time.sleep(1)
+    else: raise AssertionError('Stabilization analysis did not finish')
+    tracked=sum(line[2]=='t' for line in measured)
+    assert tracked/len(measured)>.8,(tracked,len(measured))
+    im=Image.open(shot('stabilize-measured'));tap(im.width*.5,im.height*.2)
+    restart();click_label('Camara','stabilize-reopen');time.sleep(3)
+    assert document('stabilize-reopened',lambda d:bool(d['clips'][0].get('stabilize')))==edited
+    ui_export_check()
+    filtered=OUT/'stabilized.mp4'
+    __import__('shutil').copy2(OUT/'ui-gallery-result.mp4',filtered)
+    control=export_control_document(edited,'stabilize','CameraControl')
+    def marker_jitter(file):
+        decoder=sp.Popen(['ffmpeg','-v','error','-i',str(file),'-an','-vf','scale=320:180',
+                         '-pix_fmt','rgb24','-f','rawvideo','-'],stdout=sp.PIPE,stderr=sp.PIPE)
+        positions=[];index=0
+        while True:
+            frame=decoder.stdout.read(320*180*3)
+            if not frame: break
+            assert len(frame)==320*180*3
+            if 15<=index<105:
+                xs=ys=count=0
+                for pixel in range(0,len(frame),3):
+                    r,g,b=frame[pixel:pixel+3]
+                    if r>150 and g<90 and b<90:
+                        at=pixel//3;xs+=at%320;ys+=at//320;count+=1
+                assert count>40,(file.name,index,count)
+                positions.append((xs/count,ys/count))
+            index+=1
+        error=decoder.stderr.read();assert decoder.wait()==0,error
+        assert index==120 and len(positions)==90,(index,len(positions))
+        mx=sum(x for x,y in positions)/len(positions);my=sum(y for x,y in positions)/len(positions)
+        rms=math.sqrt(sum((x-mx)**2+(y-my)**2 for x,y in positions)/len(positions))
+        return {'jitter_rms_at_320x180_px':rms,'positions':positions,'frames':index}
+    original=marker_jitter(control);corrected=marker_jitter(filtered)
+    assert original['jitter_rms_at_320x180_px']>3,original
+    ratio=corrected['jitter_rms_at_320x180_px']/original['jitter_rms_at_320x180_px']
+    assert ratio<.6,ratio
+    result={'control':original,'stabilized':corrected,'residual_ratio':ratio,'tracked_frames':tracked,'measured_frames':len(measured)}
+    (OUT/'stabilization-measurements.json').write_text(json.dumps(result,indent=2))
+    (OUT/'PASS-stabilization.json').write_text(json.dumps({'result':'PASS','scope':'Android30 actual Stabilize switch, analysis cache, save/reopen and1080p UI export; camera jitter measured against matched uncorrected Android export; synthetic pure translation, not real footage or physical Samsung','measurements':result,'actions':LOG},indent=2))
+
+
 def main():
     assert shell('getprop','ro.kernel.qemu') == '1', 'This script is for test emulators, not physical phones'
     # Restarting adbd can close its transport before the client gets an exit
@@ -478,7 +547,22 @@ def main():
     fixture = OUT / 'ClipTest.mp4'
     source = 'color=red:s=180x320:r=30:d=4' if SCENARIO=='scene-cuts' else 'testsrc2=s=320x180:r=30:d=4'
     extra = ['-vf', "drawbox=c=blue:t=fill:enable='gte(t,2)',drawbox=c=white:t=fill:enable='between(t,0.5,0.55)'"] if SCENARIO=='scene-cuts' else []
-    if SCENARIO=='audio-cleanup':
+    if SCENARIO=='stabilization':
+        import random
+        from PIL import ImageDraw
+        rng=random.Random(42)
+        texture=Image.new('RGB',(360,220));draw=ImageDraw.Draw(texture)
+        for y in range(0,220,8):
+            for x in range(0,360,8):
+                gray=rng.randrange(30,220)
+                draw.rectangle((x,y,x+7,y+7),fill=(gray,gray,gray))
+        draw.rectangle((174,104,185,115),fill=(240,15,15))
+        texture.save(OUT/'static-texture.png')
+        run('ffmpeg','-y','-v','error','-loop','1','-framerate','30','-i',str(OUT/'static-texture.png'),
+            '-f','lavfi','-i','sine=frequency=440:sample_rate=48000:duration=4',
+            '-vf','crop=320:180:20+8*sin(2*PI*3*t):20+5*sin(2*PI*2*t)',
+            '-t','4','-c:v','libx264','-pix_fmt','yuv420p','-c:a','aac','-shortest',str(fixture))
+    elif SCENARIO=='audio-cleanup':
         run('ffmpeg','-y','-v','error','-f','lavfi','-i',source,
             '-f','lavfi','-i','aevalsrc=0.1*sin(2*PI*440*t):s=48000:d=4',
             '-f','lavfi','-i','anoisesrc=c=white:a=0.02:r=48000:d=4:s=123456',
@@ -495,7 +579,7 @@ def main():
     run('adb', 'forward', 'tcp:7420', 'tcp:7420')
     rpc = Rpc()
     scenario = os.environ.get('EDITPOP_TEST_SCENARIO','full')
-    assert scenario in ('full','ui-export','scene-cuts','audio-cleanup'), scenario
+    assert scenario in ('full','ui-export','scene-cuts','audio-cleanup','stabilization'), scenario
     width,height = 1920,1080
     rpc.call('project.create', location=WORK, name=PROJECT_NAME, video={'width':width,'height':height,'rateNum':30,'rateDen':1})
     imported = rpc.call('media.import', path=PROJECT, file=FIXTURE)
@@ -506,7 +590,7 @@ def main():
     rpc.call('project.close', path=PROJECT, save=True)
     rpc.close()
     restart()
-    click_label({'scene-cuts':'Escenas','audio-cleanup':'^Audio'}.get(scenario,'Prueba'), '01-home')
+    click_label({'scene-cuts':'Escenas','audio-cleanup':'^Audio','stabilization':'Camara'}.get(scenario,'Prueba'), '01-home')
     time.sleep(3)
     if scenario=='ui-export':
         ui_export_check()
@@ -528,6 +612,9 @@ def main():
         return
     if scenario=='audio-cleanup':
         audio_cleanup_check()
+        return
+    if scenario=='stabilization':
+        stabilization_check()
         return
     toolbar('Dividir', '03-split')
     d = document('04-split', lambda d: len(d.get('clips', [])) == 2)

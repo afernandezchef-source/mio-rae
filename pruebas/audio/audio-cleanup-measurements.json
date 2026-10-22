@@ -1,0 +1,30 @@
+{
+  "1": {
+    "control": {
+      "tone_amplitude": 0.10077444663697939,
+      "residual_rms": 0.009602596519617047,
+      "peak": 0.1350533664226532
+    },
+    "filtered": {
+      "tone_amplitude": 0.10094601907943333,
+      "residual_rms": 0.0031985559602840056,
+      "peak": 0.11337050795555115
+    },
+    "residual_reduction_db": 9.548694556362577,
+    "tone_change_db": 0.014775492949221793
+  },
+  "2.5": {
+    "control": {
+      "tone_amplitude": 0.10003808565786,
+      "residual_rms": 0.01031230118927192,
+      "peak": 0.13201747834682465
+    },
+    "filtered": {
+      "tone_amplitude": 0.1004920996345572,
+      "residual_rms": 0.0038054740713662095,
+      "peak": 0.11193859577178955
+    },
+    "residual_reduction_db": 8.658936433255882,
+    "tone_change_db": 0.03933095686476679
+  }
+}

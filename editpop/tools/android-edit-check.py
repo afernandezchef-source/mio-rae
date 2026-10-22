@@ -301,7 +301,28 @@ def scene_cuts_check():
             break
         assert time.monotonic()<deadline, ('Preview did not reach blue scene',red,green,blue)
         time.sleep(1)
-    click_label('Aplicar','scene-apply',min_y=.4)
+    try:
+        click_label('Aplicar','scene-apply',min_y=.4)
+    except AssertionError:
+        # As with Export, PSM11 can skip text on the accent-filled button.
+        # Find its full-width colored rectangle, then verify its own label.
+        im=Image.open(OUT/'scene-apply.png').convert('RGB')
+        w,h=im.size
+        rows=[]
+        for y in range(int(h*.4),int(h*.95)):
+            count=sum(r>150 and g>170 and b<150 for r,g,b in
+                      im.crop((0,y,w,y+1)).getdata())
+            if count>w*.7:
+                rows.append(y)
+        assert rows, 'No full-width enabled Apply button'
+        top,bottom=min(rows),max(rows)
+        button=im.crop((int(w*.2),top+int((bottom-top)*.15),int(w*.94),bottom-int((bottom-top)*.15)))
+        p=OUT/'scene-apply-button.png'
+        button.convert('L').point(lambda v:255 if v>100 else 0).save(p)
+        text=run('tesseract',str(p),'stdout','-l','spa+eng','--psm','7').decode()
+        assert re.search('Aplicar',text,re.I), text
+        LOG.append({'tap':'Aplicar cortes marcados','method':'visible full-width button OCR','y':(top+bottom)/2})
+        tap(w/2,(top+bottom)/2)
     edited = document('scene-applied',lambda d:len(d.get('clips',[]))==2)
     clips = sorted(edited['clips'],key=lambda c:c['start'])
     assert abs(clips[1]['start']-2)<1/30+.001, clips

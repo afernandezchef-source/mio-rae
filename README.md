@@ -45,9 +45,10 @@ La APK ARM64 pasó compilación, firma e integridad ZIP/ELF16KiB.169 pruebas del
 modelo aprobadas. Estas comprobaciones no sustituyen la prueba física en tu S26.
 
 [Pruebas y procedencia](VERIFICACION.md) · [87 requisitos](SEGUIMIENTO-CONCAT.csv).
-La reducción específica de grano sigue pendiente. La reducción de ruido de audio
-y la estabilización ya tienen código en Concat, pero requieren comprobación móvil
-con material adecuado. También faltan pruebas ampliadas de capas/textos, dos
+La reducción de ruido de audio y la estabilización pasaron nuevas pruebas en
+emulador Android: [resultados y uso](SONIDO-Y-ESTABILIZACION.md). La reducción
+específica de grano sigue pendiente en esta APK r3. Falta validar con material
+real y con el Samsung S26 físico. También faltan pruebas ampliadas de capas/textos, dos
 vídeos con imagen y audio externo, interrupciones y ejecución en segundo plano.
 Las funciones IA del upstream todavía deben aislarse para la primera versión.
 No se descargaron modelos ni se enviaron vídeos personales a las pruebas remotas.

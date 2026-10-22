@@ -58,3 +58,20 @@ Siguiente etapa: verificar reducción de ruido de audio y estabilización en
 Android, implementar reducción de grano con comparación antes/después y comprobar
 un proyecto con dos vídeos, imagen, audio externo y texto. Después validar en
 el teléfono físico. No se enviaron vídeos personales a GitHub ni al emulador remoto.
+
+## Ampliación verificada sobre la misma APK r3
+
+Audio: [run39870369883](https://github.com/afernandezchef-source/mio-rae/actions/runs/39870369883)
+PASS. Interruptor real Reducir ruido, guardar/reabrir y exportación UI1080p.
+Comparado con el mismo proyecto Android sin filtro: residuo de ruido blanco
+baja9,55/8,66dB, tono440Hz cambia+0,015/+0,039dB.
+
+Estabilización: [run39871074587](https://github.com/afernandezchef-source/mio-rae/actions/runs/39871074587)
+PASS. Casilla real, análisis120frames/119seguidos, guardar/reabrir y UI1080p.
+Vibración sintética de una marca a320×180:6,960→0,404px RMS, ratio0,0581.
+Véanse pruebas/audio y pruebas/estabilizacion con controles y exportaciones.
+No prueba voz/metraje real, paneos/giros ni teléfono físico.
+
+No cambió la app: APK/hash/firma/fuente se conservan. El script adjunto se
+actualiza para reproducir estas comprobaciones. El filtro nuevo de grano
+se prepara en un candidato posterior.

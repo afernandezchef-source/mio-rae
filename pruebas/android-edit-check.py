@@ -26,7 +26,7 @@ OUT.mkdir(parents=True, exist_ok=True)
 ROOT = f'/data/user/0/{PKG}/files'
 WORK = f'/sdcard/Android/data/{PKG}/files/checks'
 SCENARIO = os.environ.get('EDITPOP_TEST_SCENARIO', 'full')
-PROJECT_NAME = 'EscenasUI' if SCENARIO == 'scene-cuts' else 'PruebaUI'
+PROJECT_NAME = {'scene-cuts':'EscenasUI','audio-cleanup':'AudioUI','stabilization':'CamaraUI'}.get(SCENARIO,'PruebaUI')
 PROJECT = WORK + '/' + PROJECT_NAME
 FIXTURE = ROOT + '/checks/ClipTest.mp4'
 LOG = []
@@ -361,6 +361,165 @@ def scene_cuts_check():
     (OUT/'PASS-scene-cuts.json').write_text(json.dumps({'result':'PASS','scope':'Actual Android UI: local scene detection, discard, select, preview, apply, atomic undo/redo, save/reopen,1080p export; synthetic red/blue with flash; no physical Samsung test','actions':LOG},indent=2))
 
 
+def export_control_document(edited,field,name):
+    """Counterfactual export, same model/codec with only the target property off."""
+    im=Image.open(shot('audio-export-done'));w,h=im.size
+    tap(w*.93,h*.055)
+    tap(w*.055,h*.055)
+    rpc=Rpc()
+    control=copy.deepcopy(edited)
+    control['name']=name
+    for entries in [control['clips'],control['timelines'][0]['clips']]:
+        for clip in entries:
+            if field=='filters': clip[field]=[]
+            else: clip.pop(field,None)
+    path=WORK+'/'+name
+    rpc.call('project.create',location=WORK,name=name,video=edited['video'])
+    rpc.call('project.close',path=path,save=True)
+    run('adb','shell','cat > '+shlex.quote(path+'/concat.json'),data=json.dumps(control).encode())
+    rpc.call('project.open',path=path)
+    job=rpc.call('export.run',path=path,output=path+'/control.mp4',width=1920,height=1080,preset='ultrafast')['job']
+    deadline=time.monotonic()+300
+    while time.monotonic()<deadline:
+        state=rpc.call('export.status',job=job)
+        if state['state']!='running':
+            assert state['state']=='done',state
+            break
+        time.sleep(2)
+    else: raise AssertionError('Control export timed out')
+    rpc.call('project.close',path=path,save=False);rpc.close()
+    run('adb','pull',path+'/control.mp4',str(OUT/(name+'.mp4')))
+    return OUT/(name+'.mp4')
+
+
+def audio_cleanup_check():
+    """Real noise switch, persistence, gallery export and matched codec control."""
+    import array
+    import math
+    before=document('audio-before',lambda d:len(d.get('clips',[]))==1)
+    toolbar('^Audio$', 'audio-open')
+    for attempt in range(8):
+        try:
+            _,y=find('Reducir','audio-noise-row-'+str(attempt),min_y=.45,max_y=.90)
+            im=Image.open(OUT/('audio-noise-row-'+str(attempt)+'.png'))
+            tap(im.width*.92,y)  # actual switch at the right of this label
+            break
+        except AssertionError:
+            im=Image.open(shot('audio-scroll-'+str(attempt)))
+            shell('input','swipe',str(int(im.width*.65)),str(int(im.height*.85)),
+                  str(int(im.width*.65)),str(int(im.height*.55)),'550')
+            time.sleep(1)
+    else:
+        raise AssertionError('Reduce noise control not reachable')
+    edited=document('audio-filter-enabled',lambda d:any(
+        any(f['id']=='concat.denoise' and f.get('enabled',True) for f in c.get('filters',[]))
+        for c in d.get('clips',[])))
+    filters=edited['clips'][0]['filters']
+    assert len(filters)==1 and abs(edited['clips'][0]['volume']-1)<1e-9
+    im=Image.open(shot('audio-noise-enabled'))
+    tap(im.width*.5,im.height*.2)  # dismiss sheet
+    restart()
+    click_label('^Audio','audio-reopen')
+    time.sleep(3)
+    assert document('audio-reopened',lambda d:bool(d['clips'][0].get('filters')))==edited
+    ui_export_check()
+    shutil=__import__('shutil')
+    shutil.copy2(OUT/'ui-gallery-result.mp4',OUT/'audio-filtered.mp4')
+    control_file=export_control_document(edited,'filters','AudioControl')
+    def measure(file,at):
+        pcm=array.array('f')
+        pcm.frombytes(run('ffmpeg','-v','error','-ss',str(at),'-i',str(file),
+                          '-t','1','-ac','1','-ar','48000','-f','f32le','-'))
+        assert len(pcm)>=47000
+        n=len(pcm);dc=sum(pcm)/n
+        sine=[math.sin(2*math.pi*440*i/48000) for i in range(n)]
+        cosine=[math.cos(2*math.pi*440*i/48000) for i in range(n)]
+        a=2*sum((v-dc)*x for v,x in zip(pcm,sine))/n
+        b=2*sum((v-dc)*x for v,x in zip(pcm,cosine))/n
+        residual=math.sqrt(sum((v-dc-a*x-b*y)**2 for v,x,y in zip(pcm,sine,cosine))/n)
+        return {'tone_amplitude':math.hypot(a,b),'residual_rms':residual,'peak':max(abs(v) for v in pcm)}
+    measurements={}
+    for at in [1,2.5]:
+        control=measure(control_file,at)
+        filtered=measure(OUT/'audio-filtered.mp4',at)
+        reduction=20*math.log10(control['residual_rms']/filtered['residual_rms'])
+        tone_change=20*math.log10(filtered['tone_amplitude']/control['tone_amplitude'])
+        assert reduction>=6,(at,reduction,control,filtered)
+        assert abs(tone_change)<1.5 and filtered['peak']<.98,(at,tone_change,filtered)
+        measurements[str(at)]={'control':control,'filtered':filtered,'residual_reduction_db':reduction,'tone_change_db':tone_change}
+    (OUT/'audio-cleanup-measurements.json').write_text(json.dumps(measurements,indent=2))
+    (OUT/'PASS-audio-cleanup.json').write_text(json.dumps({'result':'PASS','scope':'Android30 actual Reduce noise switch, save/reopen, UI1080p export; matched Android export without filter; stationary synthetic noise and440Hz tone, not real voice or Samsung','measurements':measurements,'actions':LOG},indent=2))
+
+
+def stabilization_check():
+    """Actual stabilization switch; tracked motion, persistence and output jitter."""
+    import math
+    toolbar('^Editar$', 'stabilize-open')
+    for attempt in range(12):
+        try:
+            _,y=find('Estabilizar','stabilize-row-'+str(attempt),min_y=.44,max_y=.90)
+            im=Image.open(OUT/('stabilize-row-'+str(attempt)+'.png'))
+            tap(im.width*.06,y)  # actual checkbox BEFORE the section title
+            break
+        except AssertionError:
+            im=Image.open(shot('stabilize-scroll-'+str(attempt)))
+            shell('input','swipe',str(int(im.width*.65)),str(int(im.height*.85)),
+                  str(int(im.width*.65)),str(int(im.height*.55)),'550')
+            time.sleep(1)
+    else: raise AssertionError('Stabilize control not reachable')
+    edited=document('stabilize-enabled',lambda d:bool(d['clips'][0].get('stabilize')))
+    deadline=time.monotonic()+120
+    measured=[]
+    while time.monotonic()<deadline:
+        paths=run('adb','shell','find',PROJECT+'/cache/stabilize','-name','motion',check=False).decode().splitlines()
+        if paths and paths[0].startswith(PROJECT+'/'):
+            text=run('adb','exec-out','cat',paths[0]).decode()
+            (OUT/'stabilization-motion.txt').write_text(text)
+            measured=[line.split() for line in text.splitlines() if line.startswith('f ')]
+            coverage=[line.split() for line in text.splitlines() if line.startswith('covered ')]
+            if len(measured)>=115 and any(float(line[2])>=4 for line in coverage): break
+        time.sleep(1)
+    else: raise AssertionError('Stabilization analysis did not finish')
+    tracked=sum(line[2]=='t' for line in measured)
+    assert tracked/len(measured)>.8,(tracked,len(measured))
+    im=Image.open(shot('stabilize-measured'));tap(im.width*.5,im.height*.2)
+    restart();click_label('Camara','stabilize-reopen');time.sleep(3)
+    assert document('stabilize-reopened',lambda d:bool(d['clips'][0].get('stabilize')))==edited
+    ui_export_check()
+    filtered=OUT/'stabilized.mp4'
+    __import__('shutil').copy2(OUT/'ui-gallery-result.mp4',filtered)
+    control=export_control_document(edited,'stabilize','CameraControl')
+    def marker_jitter(file):
+        decoder=sp.Popen(['ffmpeg','-v','error','-i',str(file),'-an','-vf','scale=320:180',
+                         '-pix_fmt','rgb24','-f','rawvideo','-'],stdout=sp.PIPE,stderr=sp.PIPE)
+        positions=[];index=0
+        while True:
+            frame=decoder.stdout.read(320*180*3)
+            if not frame: break
+            assert len(frame)==320*180*3
+            if 15<=index<105:
+                xs=ys=count=0
+                for pixel in range(0,len(frame),3):
+                    r,g,b=frame[pixel:pixel+3]
+                    if r>150 and g<90 and b<90:
+                        at=pixel//3;xs+=at%320;ys+=at//320;count+=1
+                assert count>40,(file.name,index,count)
+                positions.append((xs/count,ys/count))
+            index+=1
+        error=decoder.stderr.read();assert decoder.wait()==0,error
+        assert index==120 and len(positions)==90,(index,len(positions))
+        mx=sum(x for x,y in positions)/len(positions);my=sum(y for x,y in positions)/len(positions)
+        rms=math.sqrt(sum((x-mx)**2+(y-my)**2 for x,y in positions)/len(positions))
+        return {'jitter_rms_at_320x180_px':rms,'positions':positions,'frames':index}
+    original=marker_jitter(control);corrected=marker_jitter(filtered)
+    assert original['jitter_rms_at_320x180_px']>3,original
+    ratio=corrected['jitter_rms_at_320x180_px']/original['jitter_rms_at_320x180_px']
+    assert ratio<.6,ratio
+    result={'control':original,'stabilized':corrected,'residual_ratio':ratio,'tracked_frames':tracked,'measured_frames':len(measured)}
+    (OUT/'stabilization-measurements.json').write_text(json.dumps(result,indent=2))
+    (OUT/'PASS-stabilization.json').write_text(json.dumps({'result':'PASS','scope':'Android30 actual Stabilize switch, analysis cache, save/reopen and1080p UI export; camera jitter measured against matched uncorrected Android export; synthetic pure translation, not real footage or physical Samsung','measurements':result,'actions':LOG},indent=2))
+
+
 def main():
     assert shell('getprop','ro.kernel.qemu') == '1', 'This script is for test emulators, not physical phones'
     # Restarting adbd can close its transport before the client gets an exit
@@ -388,7 +547,29 @@ def main():
     fixture = OUT / 'ClipTest.mp4'
     source = 'color=red:s=180x320:r=30:d=4' if SCENARIO=='scene-cuts' else 'testsrc2=s=320x180:r=30:d=4'
     extra = ['-vf', "drawbox=c=blue:t=fill:enable='gte(t,2)',drawbox=c=white:t=fill:enable='between(t,0.5,0.55)'"] if SCENARIO=='scene-cuts' else []
-    run('ffmpeg', '-y', '-v', 'error', '-f', 'lavfi', '-i', source, '-f', 'lavfi', '-i', 'sine=frequency=440:sample_rate=48000:duration=4', *extra, '-c:v', 'libx264', '-pix_fmt', 'yuv420p', '-c:a', 'aac', '-shortest', str(fixture))
+    if SCENARIO=='stabilization':
+        import random
+        from PIL import ImageDraw
+        rng=random.Random(42)
+        texture=Image.new('RGB',(360,220));draw=ImageDraw.Draw(texture)
+        for y in range(0,220,8):
+            for x in range(0,360,8):
+                gray=rng.randrange(30,220)
+                draw.rectangle((x,y,x+7,y+7),fill=(gray,gray,gray))
+        draw.rectangle((174,104,185,115),fill=(240,15,15))
+        texture.save(OUT/'static-texture.png')
+        run('ffmpeg','-y','-v','error','-loop','1','-framerate','30','-i',str(OUT/'static-texture.png'),
+            '-f','lavfi','-i','sine=frequency=440:sample_rate=48000:duration=4',
+            '-vf','crop=320:180:20+8*sin(2*PI*3*t):20+5*sin(2*PI*2*t)',
+            '-t','4','-c:v','libx264','-pix_fmt','yuv420p','-c:a','aac','-shortest',str(fixture))
+    elif SCENARIO=='audio-cleanup':
+        run('ffmpeg','-y','-v','error','-f','lavfi','-i',source,
+            '-f','lavfi','-i','aevalsrc=0.1*sin(2*PI*440*t):s=48000:d=4',
+            '-f','lavfi','-i','anoisesrc=c=white:a=0.02:r=48000:d=4:s=123456',
+            '-filter_complex','[1:a][2:a]amix=inputs=2:normalize=0[a]',
+            '-map','0:v','-map','[a]','-c:v','libx264','-pix_fmt','yuv420p','-c:a','aac','-shortest',str(fixture))
+    else:
+        run('ffmpeg', '-y', '-v', 'error', '-f', 'lavfi', '-i', source, '-f', 'lavfi', '-i', 'sine=frequency=440:sample_rate=48000:duration=4', *extra, '-c:v', 'libx264', '-pix_fmt', 'yuv420p', '-c:a', 'aac', '-shortest', str(fixture))
     run('adb', 'push', str(fixture), FIXTURE)
     # Root-written files must belong to the application before it writes recents/settings.
     uid = shell('stat', '-c', '%u', ROOT)
@@ -398,7 +579,7 @@ def main():
     run('adb', 'forward', 'tcp:7420', 'tcp:7420')
     rpc = Rpc()
     scenario = os.environ.get('EDITPOP_TEST_SCENARIO','full')
-    assert scenario in ('full','ui-export','scene-cuts'), scenario
+    assert scenario in ('full','ui-export','scene-cuts','audio-cleanup','stabilization'), scenario
     width,height = 1920,1080
     rpc.call('project.create', location=WORK, name=PROJECT_NAME, video={'width':width,'height':height,'rateNum':30,'rateDen':1})
     imported = rpc.call('media.import', path=PROJECT, file=FIXTURE)
@@ -409,7 +590,7 @@ def main():
     rpc.call('project.close', path=PROJECT, save=True)
     rpc.close()
     restart()
-    click_label('Escenas' if scenario=='scene-cuts' else 'Prueba', '01-home')
+    click_label({'scene-cuts':'Escenas','audio-cleanup':'^Audio','stabilization':'Camara'}.get(scenario,'Prueba'), '01-home')
     time.sleep(3)
     if scenario=='ui-export':
         ui_export_check()
@@ -418,7 +599,7 @@ def main():
     # found on screen, not by an internal callback or edit command.
     for attempt in range(4):
         try:
-            click_label('ClipTest', f'02-editor-{attempt}', min_y=.55, max_y=.88)
+            click_label('Clip', f'02-editor-{attempt}', min_y=.55, max_y=.88)
             break
         except AssertionError:
             w, h = Image.open(OUT/f'02-editor-{attempt}.png').size
@@ -428,6 +609,12 @@ def main():
         raise AssertionError('Imported clip is not reachable on the timeline')
     if scenario=='scene-cuts':
         scene_cuts_check()
+        return
+    if scenario=='audio-cleanup':
+        audio_cleanup_check()
+        return
+    if scenario=='stabilization':
+        stabilization_check()
         return
     toolbar('Dividir', '03-split')
     d = document('04-split', lambda d: len(d.get('clips', [])) == 2)

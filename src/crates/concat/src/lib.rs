@@ -640,6 +640,21 @@ fn start(project: Option<std::path::PathBuf>, smoke: bool) -> Result<(), slint::
     }
 
     let editor = app.global::<Editor>();
+    editor.on_scene_start(on_window!(|state| {
+        state.scene_start();
+    }));
+    editor.on_scene_cancel(on_window!(|state| {
+        state.scene_cancel();
+    }));
+    editor.on_scene_toggle(on_window!(|state, index: i32| {
+        state.scene_toggle(index);
+    }));
+    editor.on_scene_preview(on_window!(|state, index: i32| {
+        state.scene_preview(index);
+    }));
+    editor.on_scene_apply(on_window!(|state| {
+        state.scene_apply();
+    }));
 
     // ── the launch screen ──
     app.on_start_compose(on_window!(|state| {

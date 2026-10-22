@@ -106,6 +106,7 @@ jobs:
           script: |
             scripts/ci/smoke-android.sh --package cl.kokumix.editpop.concatcandidate --out smoke-android --wait 15 src/target/quick/apk/EditPop-Concat-Candidate.apk
             timeout --kill-after=15s 900s python3 editpop/tools/android-edit-check.py android-edit-check
+            EDITPOP_TEST_SCENARIO=scene-cuts timeout --kill-after=15s 600s python3 editpop/tools/android-edit-check.py android-scene-check
       - name: Preserve startup evidence
         if: always()
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
@@ -114,6 +115,7 @@ jobs:
           path: |
             smoke-android/
             android-edit-check/
+            android-scene-check/
             src/editpop-build-x86.log
             src/target/quick/apk/EditPop-Concat-Candidate.apk
           if-no-files-found: warn

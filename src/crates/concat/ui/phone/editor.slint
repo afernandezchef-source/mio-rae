@@ -96,6 +96,8 @@ component SheetButton inherits Rectangle {
     callback clicked();
 
     height: 44px;
+    accessible-role: button;
+    accessible-label: root.label;
     border-radius: Theme.r;
     opacity: root.enabled ? 1.0 : 0.5;
     background: root.primary
@@ -373,12 +375,14 @@ export component PhoneEditor inherits Rectangle {
         root.sheet-needs-clip = needs-clip;
     }
     function hide() {
+        if (root.sheet == "scene-cuts") { Editor.scene-cancel(); }
         root.sheet = "";
         root.sheet-needs-clip = false;
     }
 
     pure function sheet-title(name: string) -> string {
         return name == "media" ? I18n.t("common.media")
+            : name == "scene-cuts" ? "Revisar cortes"
             : name == "audio" ? I18n.t("common.audio")
             : name == "text" || name == "clip-text" ? I18n.t("common.text")
             : name == "effects" || name == "clip-effects" ? I18n.t("common.effects")
@@ -971,6 +975,12 @@ export component PhoneEditor inherits Rectangle {
                 current: root.sheet == "transitions";
                 clicked => { root.show("transitions", true); }
             }
+            if root.is-video: ToolItem {
+                glyph: Glyph.split;
+                label: "Sugerir cortes";
+                current: root.sheet == "scene-cuts";
+                clicked => { root.show("scene-cuts", true); Editor.scene-start(); }
+            }
             if root.is-picture || root.is-text: ToolItem {
                 glyph: Glyph.sparkle;
                 label: I18n.t("common.effects");
@@ -1129,6 +1139,46 @@ export component PhoneEditor inherits Rectangle {
         open: root.sheet != "";
         title: root.sheet-title(root.sheet);
         closed => { root.hide(); }
+
+        if root.sheet == "scene-cuts": VerticalLayout {
+            padding: 12px;
+            spacing: 10px;
+            SheetNote { text: Editor.scene-message; }
+            if Editor.scene-busy: SheetNote {
+                text: "Analizando: " + Editor.scene-progress + "%";
+            }
+            for cut[index] in Editor.scene-cuts: HorizontalLayout {
+                spacing: 8px;
+                SheetButton {
+                    glyph: Glyph.split;
+                    label: (cut.chosen ? "✓ " : "○ ") + cut.label;
+                    primary: cut.chosen;
+                    clicked => { Editor.scene-toggle(index); }
+                }
+                SheetButton {
+                    glyph: Glyph.play;
+                    label: "Ver";
+                    clicked => { Editor.scene-preview(index); }
+                }
+            }
+            SheetButton {
+                glyph: Glyph.split;
+                label: "Aplicar cortes marcados";
+                primary: true;
+                enabled: Editor.scene-can-apply;
+                clicked => { Editor.scene-apply(); root.hide(); }
+            }
+            if !Editor.scene-busy: SheetButton {
+                glyph: Glyph.split;
+                label: "Analizar de nuevo";
+                clicked => { Editor.scene-start(); }
+            }
+            SheetButton {
+                glyph: Glyph.chevron-left;
+                label: Editor.scene-busy ? "Cancelar análisis" : "Descartar y cerrar";
+                clicked => { root.hide(); }
+            }
+        }
 
         // ── the bin ──
         if root.sheet == "media": VerticalLayout {

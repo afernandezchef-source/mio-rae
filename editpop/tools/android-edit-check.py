@@ -25,7 +25,9 @@ OUT = Path(sys.argv[1] if len(sys.argv) > 1 else 'android-edit-check')
 OUT.mkdir(parents=True, exist_ok=True)
 ROOT = f'/data/user/0/{PKG}/files'
 WORK = f'/sdcard/Android/data/{PKG}/files/checks'
-PROJECT = WORK + '/PruebaUI'
+SCENARIO = os.environ.get('EDITPOP_TEST_SCENARIO', 'full')
+PROJECT_NAME = 'EscenasUI' if SCENARIO == 'scene-cuts' else 'PruebaUI'
+PROJECT = WORK + '/' + PROJECT_NAME
 FIXTURE = ROOT + '/checks/ClipTest.mp4'
 LOG = []
 
@@ -226,6 +228,65 @@ def ui_export_check():
     (OUT/'PASS-ui-export.json').write_text(json.dumps({'result':'PASS','scope':'Real UI Export buttons, H264/AAC1080p and completed MediaStore publication; synthetic project; no Samsung test','actions':LOG},indent=2))
 
 
+def accessible_tap(label):
+    """Tap the actual accessible Android control, never call an editor API."""
+    import xml.etree.ElementTree as ET
+    shell('uiautomator', 'dump', '/sdcard/editpop-window.xml')
+    raw = run('adb', 'exec-out', 'cat', '/sdcard/editpop-window.xml')
+    (OUT/(label+'-accessibility.xml')).write_bytes(raw)
+    for node in ET.fromstring(raw).iter('node'):
+        if label.lower() in (node.get('content-desc','')+' '+node.get('text','')).lower():
+            bounds = [int(v) for v in re.findall(r'\d+',node.get('bounds',''))]
+            if len(bounds)==4 and bounds[2]>bounds[0] and bounds[3]>bounds[1]:
+                LOG.append({'accessible tap':label,'bounds':bounds})
+                tap((bounds[0]+bounds[2])/2,(bounds[1]+bounds[3])/2)
+                return
+    raise AssertionError(f'Accessible control absent: {label}')
+
+
+def scene_cuts_check():
+    before = document('scene-before', lambda d:len(d.get('clips',[]))==1)
+    toolbar('Sugerir', 'scene-open')
+    deadline = time.monotonic()+90
+    while True:
+        rows = words('scene-review',region=(.4,.96),contrast='gray')
+        if any(re.search('marcados',r['text'],re.I) for r in rows) and any('00:02' in r['text'] for r in rows):
+            break
+        assert time.monotonic()<deadline, 'No scene proposal at2s'
+        time.sleep(1)
+    assert document('scene-unmodified',lambda d:len(d.get('clips',[]))==1)==before
+    click_label('Descartar','scene-discard',min_y=.4)
+    assert document('scene-discarded',lambda d:len(d.get('clips',[]))==1)==before
+    toolbar('Sugerir', 'scene-open-again')
+    deadline = time.monotonic()+90
+    while True:
+        try:
+            click_label('00:02', 'scene-select-proposal',min_y=.4)
+            break
+        except AssertionError:
+            assert time.monotonic()<deadline
+            time.sleep(1)
+    click_label('Ver','scene-preview',min_y=.4)
+    shot('scene-preview-visible')
+    click_label('Aplicar','scene-apply',min_y=.4)
+    edited = document('scene-applied',lambda d:len(d.get('clips',[]))==2)
+    clips = sorted(edited['clips'],key=lambda c:c['start'])
+    assert abs(clips[1]['start']-2)<1/30+.001, clips
+    assert abs(sum(c['duration'] for c in clips)-4)<.001
+    accessible_tap('Deshacer')
+    assert document('scene-undone',lambda d:len(d.get('clips',[]))==1)==before
+    accessible_tap('Rehacer')
+    assert document('scene-redone',lambda d:len(d.get('clips',[]))==2)==edited
+    restart()
+    click_label('Escenas','scene-reopen')
+    time.sleep(3)
+    assert document('scene-reopened',lambda d:len(d.get('clips',[]))==2)==edited
+    # Remove the prior full-regression export so publication must be new.
+    shell('content','delete','--uri','content://media/external/video/media')
+    ui_export_check()
+    (OUT/'PASS-scene-cuts.json').write_text(json.dumps({'result':'PASS','scope':'Actual Android UI: local scene detection, discard, select, preview, apply, atomic undo/redo, save/reopen,1080p export; synthetic red/blue with flash; no physical Samsung test','actions':LOG},indent=2))
+
+
 def main():
     assert shell('getprop','ro.kernel.qemu') == '1', 'This script is for test emulators, not physical phones'
     run('adb', 'root')
@@ -237,7 +298,9 @@ def main():
     prefs = {'locale':'es', 'accent':'coral', 'server':{'enabled':True,'listen':'127.0.0.1:7420','token':TEST_TOKEN}}
     run('adb', 'shell', f'cat > {shlex.quote(config+"/settings.json")}', data=json.dumps(prefs).encode())
     fixture = OUT / 'ClipTest.mp4'
-    run('ffmpeg', '-y', '-v', 'error', '-f', 'lavfi', '-i', 'testsrc2=s=320x180:r=30:d=4', '-f', 'lavfi', '-i', 'sine=frequency=440:sample_rate=48000:duration=4', '-c:v', 'libx264', '-pix_fmt', 'yuv420p', '-c:a', 'aac', '-shortest', str(fixture))
+    source = 'color=red:s=180x320:r=30:d=4' if SCENARIO=='scene-cuts' else 'testsrc2=s=320x180:r=30:d=4'
+    extra = ['-vf', "drawbox=c=blue:t=fill:enable='gte(t,2)',drawbox=c=white:t=fill:enable='between(t,0.5,0.55)'"] if SCENARIO=='scene-cuts' else []
+    run('ffmpeg', '-y', '-v', 'error', '-f', 'lavfi', '-i', source, '-f', 'lavfi', '-i', 'sine=frequency=440:sample_rate=48000:duration=4', *extra, '-c:v', 'libx264', '-pix_fmt', 'yuv420p', '-c:a', 'aac', '-shortest', str(fixture))
     run('adb', 'push', str(fixture), FIXTURE)
     # Root-written files must belong to the application before it writes recents/settings.
     uid = shell('stat', '-c', '%u', ROOT)
@@ -247,9 +310,9 @@ def main():
     run('adb', 'forward', 'tcp:7420', 'tcp:7420')
     rpc = Rpc()
     scenario = os.environ.get('EDITPOP_TEST_SCENARIO','full')
-    assert scenario in ('full','ui-export'), scenario
+    assert scenario in ('full','ui-export','scene-cuts'), scenario
     width,height = 1920,1080
-    rpc.call('project.create', location=WORK, name='PruebaUI', video={'width':width,'height':height,'rateNum':30,'rateDen':1})
+    rpc.call('project.create', location=WORK, name=PROJECT_NAME, video={'width':width,'height':height,'rateNum':30,'rateDen':1})
     imported = rpc.call('media.import', path=PROJECT, file=FIXTURE)
     project = imported['project']
     timeline = project['timelines'][0]
@@ -258,7 +321,7 @@ def main():
     rpc.call('project.close', path=PROJECT, save=True)
     rpc.close()
     restart()
-    click_label('Prueba', '01-home')
+    click_label('Escenas' if scenario=='scene-cuts' else 'Prueba', '01-home')
     time.sleep(3)
     if scenario=='ui-export':
         ui_export_check()
@@ -275,6 +338,9 @@ def main():
             time.sleep(1)
     else:
         raise AssertionError('Imported clip is not reachable on the timeline')
+    if scenario=='scene-cuts':
+        scene_cuts_check()
+        return
     toolbar('Dividir', '03-split')
     d = document('04-split', lambda d: len(d.get('clips', [])) == 2)
     clips = sorted(d['clips'], key=lambda c:c['start'])

@@ -48,6 +48,7 @@ mod backdrop;
 mod consolidate;
 use consolidate::MergeJob;
 mod masking;
+mod scene_cuts;
 use masking::{MaskFrame, MaskGrip};
 use slint::{Model, ModelRc, SharedString, VecModel};
 
@@ -937,6 +938,7 @@ pub struct Studio {
     /// Counts every change to the document. What the flattened clip list
     /// below is keyed on, so a frame of an unchanged document reuses it.
     revision: u64,
+    scene_review: Option<scene_cuts::SceneReview>,
     /// The last flattening of the document for the monitor - titles
     /// included - and the revision and output size it was made at. Shared
     /// with the monitor by pointer, so it can keep its plan for as long as
@@ -2380,6 +2382,7 @@ impl Studio {
             media_jump: 0,
             audition: None,
             revision: 0,
+            scene_review: None,
             flat: None,
             commit_pending: false,
             commit_targets: Vec::new(),
@@ -2833,6 +2836,7 @@ impl Studio {
     /// The bookkeeping every change to the edit needs: the caches that
     /// follow the document, the autosave, the monitor and the mix.
     fn after_change(&mut self) {
+        self.scene_cancel();
         self.dirty = true;
         self.revision += 1;
         self.assign_media_rows();
@@ -8426,6 +8430,7 @@ impl Studio {
                 self.host.monitor.clear();
                 self.audition = None;
                 self.revision += 1;
+                self.scene_cancel();
                 self.flat = None;
                 self.sync_audio();
                 self.request_media_art();
@@ -8667,6 +8672,7 @@ impl Studio {
         self.audition = None;
         self.revision += 1;
         self.flat = None;
+        self.scene_cancel();
         self.host
             .playback
             .set_clips(std::path::PathBuf::new(), Vec::new());
@@ -9044,6 +9050,7 @@ impl Studio {
     // ── publishing ──
 
     pub fn publish(&self, app: &App, models: &Models) {
+        self.publish_scene(app);
         // The tray's three menu labels and the tooltips' bare-letter
         // hints, spelled from the keymap so a rebind moves the words
         // with the key. An action left unbound shows an em dash rather

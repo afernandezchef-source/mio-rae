@@ -1,6 +1,55 @@
 # EditPop — evaluación de Concat
 
-Candidato Android separado, no APK entregada ni sustitución de EditPop nativo.
+## Estado vigente: r2 verificada y publicada
+
+Descarga y guía: https://github.com/afernandezchef-source/mio-rae/tree/editpop/download-r2
+
+La corrección de Dividir, Pixelate, Dissolve, guardar/reabrir y exportar el mismo
+proyecto por los botones de la app a galería a1080p pasó en Android11/API30.
+Se corrigieron el bloqueo de inicialización MediaCodec y sus etiquetas de color.
+La APK ARM64 se firmó con la misma clave de r1; no requiere desinstalar para
+actualizar. No se probó físicamente un Samsung S26. El estado detallado y los
+pendientes están en REGRESION-r2.md y SEGUIMIENTO-CONCAT.csv (87 criterios).
+
+Fuente exacta ARM:4efc27da401bc2ba970744890d4b84cbaf2698fd,
+run39688535227. x86:9e9606c10cf287a7fc6f8b43bf8299dc6a38d2ba,
+run39688535246. Ambos árboles son idénticos. APK SHA256:
+0d7c93ac01f2eac274522477e44ae0a50aeeed742c2e707982e1df81d0c44e5f.
+
+Los apartados siguientes conservan el historial de adopción y compilaciones
+anteriores; no sustituyen el estado vigente de r2.
+
+## Compilación en un entorno con más capacidad — 21-10-2026
+
+Se publicó una copia completa de la candidata, conservando licencias, en la rama
+aislada `editpop/concat-android-build` de `afernandezchef-source/mio-rae`. No se
+modificó la rama predeterminada de ese repositorio. Se usó un commit de snapshot
+con procedencia explícita porque la copia local de Concat tiene historia shallow;
+la rama original local y su historia se conservan.
+
+La primera ejecución de GitHub Actions confirmó **15,6 GiB de RAM y3GiB de swap**;
+aprobó la puerta de memoria y falló después por `sdkmanager` ausente. Se corrigió
+la preparación con acciones fijadas de Java17 y Android SDK, y se añadió caché de
+FFmpeg y dependencias Rust. Se lanzó la segunda ejecución:
+https://github.com/afernandezchef-source/mio-rae/actions/runs/39631365886
+Fuente exacta: `37cb8b2467f50c044b77bd186032a54faa554b82`.
+
+La tercera ejecución,39631665408, terminó con éxito sobre la fuente
+`e57cbccf48b7c68045698739c106f031f0f42972`: compilación ARM64 en14min03s,
+picoRSS14.601.456KiB; firma/identidad/ZIPyELF16KiB aprobados. Se descargó la APK y
+se firmó con una clave de pruebas persistente fuera del repositorio. Sus12entradas
+de contenido ajenas a META-INF son idénticas a las deCI; verificación localPASS.
+Entrega `/workspace/editpop-deliveries/EditPop-Concat-Android-arm64-r1.apk`, SHA256
+`0dfda72e8d5038af87f4abdc9adf8458f2ae9dcec3f3ec766c5d9a42a89ed0b3`.
+Fuente correspondiente `EditPop-Concat-Android-arm64-r1-fuentes.zip` en esa carpeta.
+El arranque x86_64/API30 pasó en la ejecución39633057257: 60 s visible, sin
+fatal/ANR, captura inspeccionada. Samsung y edición/exportación real siguen pendientes. El fallo de
+preparación de la primera ejecución y su memoria se conservan en
+`evidence/ci-39630883803.log`. Los bloqueos anteriores de creación de repositorios
+no impidieron publicar en este repositorio existente con permiso de escritura.
+
+Primera APK ARM64 basada en Concat obtenida. Candidata de pruebas separada;
+no sustituye a EditPop nativo como entrega verificada ni certifica SamsungS26.
 
 Base: https://github.com/jub0t/Concat
 Commit fijado: 9f465da4a4f490991696f77890e69a9ba694f18a
@@ -14,7 +63,7 @@ Fecha de revisión: 2026-10-21.
 - Icono original de EditPop para Android y ventana; identificación de la base Concat en inicio.
 - Se conservan copyright, AGPL, avisos y procedencia. No es una distribución oficial de Concat.
 
-También se mejoró la seguridad de importación y publicación, y se fijaron español y acento coral como preferencias iniciales. Estos cambios no migran proyectos; la compilación Android se encuentra bloqueada por memoria en este entorno. Las funciones de IA del upstream siguen presentes en el código; desactivarlas/aislarlas para la primera entrega solicitada forma parte de la adaptación pendiente. No se descargaron modelos ni se enviaron medios a servidores.
+También se mejoró la seguridad de importación y publicación, y se fijaron español y acento coral como preferencias iniciales. Estos cambios no migran proyectos. El límite local de8GiB se resolvió para esta compilación usando GitHub Actions con15,6GiB RAM y3GiB swap. Las funciones de IA del upstream siguen presentes en el código; desactivarlas/aislarlas para la primera entrega solicitada forma parte de la adaptación pendiente. No se descargaron modelos ni se enviaron medios a servidores.
 
 ## Comprobación ejecutada
 
@@ -27,9 +76,9 @@ rustc +1.93.1 --edition 2024 --test src/crates/concat-core/src/lib.rs -o /tmp/ed
 
 Además:162 pruebas de concat-project,72 de concat-effects y7 escenarios de importación Java aprobados; registros en evidence/. Registro core: `evidence/core-tests.log`. Esto comprueba lógica de tiempo, retiming, animación y modelo; no acredita reproducción, GPU, exportación ni teléfono.
 
-## Compilación Android pendiente
+## Compilación Android reproducible
 
-Seguir `src/README.md`, `.github/workflows/mobile.yml` y el toolchain fijado en `src/rust-toolchain.toml`. Se requieren SDK Android, NDK, JDK, Rust1.93.1, cargo-apk, CMake, libclang y las dependencias nativas. El entorno actual dispone de SDK/NDK/JDK, Rust1.93.1 con targetARM64, cargo-apk0.10.0, CMake, libclang18 y Ninja. Las bibliotecas sherpa están preparadas y FFmpeg8.1 móvil ARM64 terminó de compilar. La APK aún no está aprobada; consultar DECISION.md y los registros antes de atribuir resultados.
+Seguir `src/README.md`, `.github/workflows/mobile.yml` y el toolchain fijado en `src/rust-toolchain.toml`. Se requieren SDK Android, NDK, JDK, Rust1.93.1, cargo-apk, CMake, libclang y las dependencias nativas. El entorno actual dispone de SDK/NDK/JDK, Rust1.93.1 con targetARM64, cargo-apk0.10.0, CMake, libclang18 y Ninja. Las bibliotecas sherpa están preparadas y FFmpeg8.1 móvil ARM64 terminó de compilar. La APK ARM64 pasó la comprobación estructural y la build x86_64 pasó arranque; el recorrido audiovisual aún no está aprobado.
 
 Desde la raíz, con esas herramientas preparadas:
 
@@ -66,18 +115,24 @@ Con SDK y NDK configurados, ejecutar:
 editpop/tools/verify-apk.sh /ruta/absoluta/EditPop-Concat-Candidate.apk
 ```
 
-Comprueba firma, alineación ZIP, identidad separada, minSdk26/targetSdk35, biblioteca principal ARM64 y segmentos ELF de16KiB. Es una comprobación estructural: no demuestra instalación, reproducción, mezcla ni exportación. El script también imprime SHA256 y certificado para identificar exactamente el artefacto probado. No se ha ejecutado sobre esta candidata mientras la APK no exista.
+Comprueba firma, alineación ZIP, identidad separada, minSdk26/targetSdk35, biblioteca principal ARM64 y segmentos ELF de16KiB. Es una comprobación estructural: no demuestra instalación, reproducción, mezcla ni exportación. El script también imprime SHA256 y certificado para identificar exactamente el artefacto probado. Se ejecutó sobre la APK ARM64 en CI y sobre la entrega final firmada localmente; ambas pasaron.
 
 El script mobile-env.sh reutiliza ONNX Runtime1.27.1 incluido en sherpa para ambos ABI Android. Evita la descarga alternativa de ort-sys cuyo CDN respondió403 en este entorno. En una máquina con libclang sin cabeceras incorporadas, también indica explícitamente el resource-dir del NDK. No hace falta modificar dependencias descargadas de Cargo.
 
-## Bloqueo actual y compilación alternativa
+## Historial del bloqueo local y solución externa
 
-Los intentos locales de generar la APK terminaron o se detuvieron por el límite de memoria de 8 GiB. La interfaz Android sin el workspace de escritorio genera 63 MB de Rust. Para separar su compilación de la lógica del editor se creó `concat-ui`, con una sola unidad de código y sin incremental en el perfil `quick`. `cargo check --profile quick -p concat-android --target aarch64-linux-android` terminó correctamente con NDK configurado; las dos compilaciones APK de esta estructura terminaron por SIGKILL/OOM mientras Rust generaba código para `concat-ui`. No se generó APK Concat. Esto describe memoria del compilador, no consumo de EditPop instalado.
+El límite local de 8 GiB produjo SIGKILL/OOM al generar código para `concat-ui`,
+incluso tras separar la interfaz y usar una unidad de código sin incremental.
+`cargo check` sí pasó. Este límite describe el compilador, no la app instalada.
 
-Se preparó `.github/workflows/editpop-android.yml`, de ejecución manual, con herramientas fijadas, bibliotecas móviles, firma de pruebas, comprobaciones estructurales y entrega conjunta de APK/fuentes/registros. Su sintaxis YAML fue revisada; **no se ejecutó en GitHub ni se publicó nada**. Comprueba la memoria efectiva del runner y exige al menos 14 GiB disponibles como margen inicial; todavía no se ha validado qué memoria basta. La disponibilidad y costes dependen del repositorio/plan GitHub. El flujo conserva licencia y fuentes, y no necesita claves de producción. Su clave de pruebas es temporal: diferentes ejecuciones no garantizan actualización sobre la instalación anterior. No desinstalar una app con proyectos sin guardar una copia.
+El workflow `.github/workflows/editpop-android.yml` resolvió el bloqueo en el
+repositorio existente con 15,6 GiB de RAM y 3 GiB de swap. La creación inicial de
+un fork devolvió 403, pero no impidió publicar en una rama aislada del repositorio
+propio accesible. La compilación ARM64 y la comprobación estructural terminaron
+con éxito. La entrega se volvió a firmar con una clave local de pruebas persistente.
 
-Antes de usar el workflow, subir todos los cambios de esta candidata a un repositorio propio respetando AGPL. Git archive entrega el commit completo que ejecuta el flujo. Los controles no sustituyen el protocolo Android de ANDROID-VALIDATION.md.
-
-## Acceso de GitHub en esta sesión
-
-La fuente candidata está en la rama local `editpop/evaluate-android`. Se intentó crear un fork de `jub0t/Concat` y un repositorio propio `EditPop-Android`, pero la credencial de esta integración respondió HTTP 403 `Resource not accessible by integration` en ambas operaciones. No se publicó código ni se lanzó Actions. Hace falta un repositorio ya creado y accesible para esa credencial, o una máquina de compilación con más de 8 GiB; el workflow manual queda pendiente de ejecución. La APK Kotlin independiente con ondas está disponible en `/workspace/editpop-native/candidates/` y no acredita la variante Concat.
+El workflow separado `editpop-smoke.yml` compiló x86_64 y verificó arranque real
+con KVM en Android 11. Consulte [CI-ESTADO.md](CI-ESTADO.md) para trazabilidad.
+No se ha completado la prueba física Samsung ni el recorrido de exportación.
+La bienvenida de r1 dice Concat; la corrección de identidad está preparada en
+fuentes para la siguiente candidata y no forma parte de la entrega r1.

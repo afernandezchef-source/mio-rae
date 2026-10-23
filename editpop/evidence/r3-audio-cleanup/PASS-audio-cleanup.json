@@ -1,0 +1,66 @@
+{
+  "result": "PASS",
+  "scope": "Android30 actual Reduce noise switch, save/reopen, UI1080p export; matched Android export without filter; stationary synthetic noise and440Hz tone, not real voice or Samsung",
+  "measurements": {
+    "1": {
+      "control": {
+        "tone_amplitude": 0.10077444663697939,
+        "residual_rms": 0.009602596519617047,
+        "peak": 0.1350533664226532
+      },
+      "filtered": {
+        "tone_amplitude": 0.10094601907943333,
+        "residual_rms": 0.0031985559602840056,
+        "peak": 0.11337050795555115
+      },
+      "residual_reduction_db": 9.548694556362577,
+      "tone_change_db": 0.014775492949221793
+    },
+    "2.5": {
+      "control": {
+        "tone_amplitude": 0.10003808565786,
+        "residual_rms": 0.01031230118927192,
+        "peak": 0.13201747834682465
+      },
+      "filtered": {
+        "tone_amplitude": 0.1004920996345572,
+        "residual_rms": 0.0038054740713662095,
+        "peak": 0.11193859577178955
+      },
+      "residual_reduction_db": 8.658936433255882,
+      "tone_change_db": 0.03933095686476679
+    }
+  },
+  "actions": [
+    {
+      "tap": "^Audio",
+      "x": 399.5,
+      "y": 771.0
+    },
+    {
+      "tap": "ClipTest",
+      "x": 643.0,
+      "y": 1608.5
+    },
+    {
+      "tap": "^Audio$",
+      "x": 315.0,
+      "y": 2212.5
+    },
+    {
+      "tap": "^Audio",
+      "x": 399.5,
+      "y": 771.0
+    },
+    {
+      "tap": "Exportar from visible button OCR",
+      "x": 930.5,
+      "y": 126.0
+    },
+    {
+      "tap": "Exportar from visible button OCR",
+      "x": 540.0,
+      "y": 2192.5
+    }
+  ]
+}

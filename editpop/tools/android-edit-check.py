@@ -26,7 +26,7 @@ OUT.mkdir(parents=True, exist_ok=True)
 ROOT = f'/data/user/0/{PKG}/files'
 WORK = f'/sdcard/Android/data/{PKG}/files/checks'
 SCENARIO = os.environ.get('EDITPOP_TEST_SCENARIO', 'full')
-PROJECT_NAME = {'scene-cuts':'EscenasUI','audio-cleanup':'AudioUI','stabilization':'CamaraUI'}.get(SCENARIO,'PruebaUI')
+PROJECT_NAME = {'scene-cuts':'EscenasUI','audio-cleanup':'AudioUI','stabilization':'CamaraUI','grain-reduction':'GranoUI'}.get(SCENARIO,'PruebaUI')
 PROJECT = WORK + '/' + PROJECT_NAME
 FIXTURE = ROOT + '/checks/ClipTest.mp4'
 LOG = []
@@ -172,7 +172,7 @@ def restart():
 
 
 
-def ui_export_check():
+def ui_export_check(timeout_seconds=180):
     """Real Export buttons and MediaStore publication on a fresh emulator."""
     def export_tap(name, header):
         try:
@@ -199,7 +199,9 @@ def ui_export_check():
     export_tap('ui-export-open', True)
     time.sleep(2)
     export_tap('ui-export-start', False)
-    until = time.monotonic()+180
+    export_started = time.monotonic()
+    until = export_started+timeout_seconds
+    next_capture = export_started+60
     row = None
     while time.monotonic()<until:
         listing = shell('content','query','--uri','content://media/external/video/media',
@@ -209,8 +211,11 @@ def ui_export_check():
         if rows:
             row = rows[-1]
             break
+        if timeout_seconds>180 and time.monotonic()>=next_capture:
+            shot('ui-export-progress-'+str(round(time.monotonic()-export_started)))
+            next_capture=time.monotonic()+60
         time.sleep(2)
-    assert row, 'Export button did not publish a completed video to Movies/EditPop within180s'
+    assert row, f'Export button did not publish a completed video to Movies/EditPop within{timeout_seconds}s'
     match = re.search(r'_data=(.*?)(?:, |$)', row)
     assert match and match[1].startswith('/storage/emulated/0/Movies/EditPop/'), row
     exported = OUT/'ui-gallery-result.mp4'
@@ -225,7 +230,7 @@ def ui_export_check():
     assert any(stream['codec_type']=='audio' for stream in probe['streams']),probe
     run('ffmpeg','-xerror','-v','error','-i',str(exported),'-f','null','-')
     shot('ui-export-published')
-    (OUT/'PASS-ui-export.json').write_text(json.dumps({'result':'PASS','scope':'Real UI Export buttons, H264/AAC1080p and completed MediaStore publication; synthetic project; no Samsung test','actions':LOG},indent=2))
+    (OUT/'PASS-ui-export.json').write_text(json.dumps({'result':'PASS','scope':'Real UI Export buttons, H264/AAC1080p and completed MediaStore publication; synthetic project; no Samsung test','publication_seconds_including_polling':time.monotonic()-export_started,'timeout_seconds':timeout_seconds,'actions':LOG},indent=2))
 
 
 def transport_tap(label):
@@ -361,12 +366,17 @@ def scene_cuts_check():
     (OUT/'PASS-scene-cuts.json').write_text(json.dumps({'result':'PASS','scope':'Actual Android UI: local scene detection, discard, select, preview, apply, atomic undo/redo, save/reopen,1080p export; synthetic red/blue with flash; no physical Samsung test','actions':LOG},indent=2))
 
 
-def export_control_document(edited,field,name):
+def export_control_document(edited,field,name,preview_actual=False):
     """Counterfactual export, same model/codec with only the target property off."""
     im=Image.open(shot('audio-export-done'));w,h=im.size
     tap(w*.93,h*.055)
     tap(w*.055,h*.055)
     rpc=Rpc()
+    if preview_actual:
+        rpc.call('project.open',path=PROJECT)
+        rpc.call('preview.frame',path=PROJECT,time=2,output=PROJECT+'/effect-preview.png',width=1920,height=1080)
+        run('adb','pull',PROJECT+'/effect-preview.png',str(OUT/'effect-preview.png'))
+        rpc.call('project.close',path=PROJECT,save=True)
     control=copy.deepcopy(edited)
     control['name']=name
     for entries in [control['clips'],control['timelines'][0]['clips']]:
@@ -520,6 +530,59 @@ def stabilization_check():
     (OUT/'PASS-stabilization.json').write_text(json.dumps({'result':'PASS','scope':'Android30 actual Stabilize switch, analysis cache, save/reopen and1080p UI export; camera jitter measured against matched uncorrected Android export; synthetic pure translation, not real footage or physical Samsung','measurements':result,'actions':LOG},indent=2))
 
 
+def grain_reduction_check():
+    """Actual catalogue application, preserved edge and reduced encoded noise."""
+    from PIL import ImageChops,ImageStat
+    toolbar('Efect','grain-open')
+    _,search_y=click_label('Buscar','grain-search',min_y=.4)
+    shell('input','text','grano');shell('input','keyevent','4');time.sleep(1)
+    rows=words('grain-results',region=(.4,.95),contrast='gray')
+    matches=[r for r in rows if re.search('grano',r['text'],re.I) and int(r['top'])>search_y+50]
+    assert matches,'No grain-reduction result card'
+    r=max(matches,key=lambda r:int(r['top']))
+    tap(int(r['left'])+int(r['width'])/2,int(r['top'])+int(r['height'])/2-30)
+    edited=document('grain-applied',lambda d:any(e['id']=='editpop.grain-reduction'
+        for c in d.get('clips',[]) for e in c.get('videoEffects',[])))
+    im=Image.open(shot('grain-enabled'));tap(im.width*.5,im.height*.2)
+    restart();click_label('Grano','grain-reopen');time.sleep(3)
+    assert document('grain-reopened',lambda d:bool(d['clips'][0].get('videoEffects')))==edited
+    # The smoke job already exported other synthetic projects. Require a new
+    # gallery publication from this actual grain export.
+    shell('content','delete','--uri','content://media/external/video/media')
+    # Run39872742984 reached69% at180s, ETA81s on SwiftShader, with
+    # no crash/error. Allow420s only for this measured software-GPU case;
+    # keep strict image, gallery, duration and codec assertions unchanged.
+    started=time.monotonic();ui_export_check(timeout_seconds=420);round_trip=time.monotonic()-started
+    __import__('shutil').copy2(OUT/'ui-gallery-result.mp4',OUT/'grain-filtered.mp4')
+    control=export_control_document(edited,'videoEffects','GrainControl',preview_actual=True)
+    pictures={}
+    for label,file in [('control',control),('filtered',OUT/'grain-filtered.mp4')]:
+        path=OUT/('grain-'+label+'.png')
+        run('ffmpeg','-y','-v','error','-ss','2','-i',str(file),'-frames:v','1',str(path))
+        pictures[label]=Image.open(path).convert('RGB')
+    measurements={}
+    for label,box in [('left',(96,96,864,984)),('right',(1056,96,1824,984))]:
+        before=ImageStat.Stat(pictures['control'].crop(box))
+        after=ImageStat.Stat(pictures['filtered'].crop(box))
+        ratio=sum(after.stddev)/sum(before.stddev)
+        assert sum(before.stddev)/3>2,(label,before.stddev)
+        assert ratio<.8,(label,ratio,before.stddev,after.stddev)
+        assert max(abs(a-b) for a,b in zip(before.mean,after.mean))<3,(before.mean,after.mean)
+        measurements[label]={'control_stddev_rgb':before.stddev,'filtered_stddev_rgb':after.stddev,'noise_ratio':ratio}
+    left=ImageStat.Stat(pictures['filtered'].crop((959,96,960,984))).mean
+    right=ImageStat.Stat(pictures['filtered'].crop((960,96,961,984))).mean
+    contrast=sum(right)/3-sum(left)/3
+    assert contrast>80,('Sharp edge washed out',contrast)
+    preview=Image.open(OUT/'effect-preview.png').convert('RGB')
+    error=sum(ImageStat.Stat(ImageChops.difference(preview,pictures['filtered'])).mean)/3
+    control_error=sum(ImageStat.Stat(ImageChops.difference(preview,pictures['control'])).mean)/3
+    assert error<4 and error<control_error,(error,control_error)
+    measurements.update({'edge_contrast':contrast,'preview_export_mae':error,'preview_control_mae':control_error,
+        'ui_export_round_trip_seconds_including_OCR_and_validation':round_trip})
+    (OUT/'grain-measurements.json').write_text(json.dumps(measurements,indent=2))
+    (OUT/'PASS-grain-reduction.json').write_text(json.dumps({'result':'PASS','scope':'Android30 actual Reducir grano catalogue application, save/reopen,1080p UI export; noise and edge measured against same Android project without effect, shared preview/export; synthetic stationary grain, not physical Samsung','measurements':measurements,'actions':LOG},indent=2))
+
+
 def main():
     assert shell('getprop','ro.kernel.qemu') == '1', 'This script is for test emulators, not physical phones'
     # Restarting adbd can close its transport before the client gets an exit
@@ -547,7 +610,20 @@ def main():
     fixture = OUT / 'ClipTest.mp4'
     source = 'color=red:s=180x320:r=30:d=4' if SCENARIO=='scene-cuts' else 'testsrc2=s=320x180:r=30:d=4'
     extra = ['-vf', "drawbox=c=blue:t=fill:enable='gte(t,2)',drawbox=c=white:t=fill:enable='between(t,0.5,0.55)'"] if SCENARIO=='scene-cuts' else []
-    if SCENARIO=='stabilization':
+    if SCENARIO=='grain-reduction':
+        import random
+        rng=random.Random(123)
+        image=Image.new('RGB',(1920,1080))
+        pixels=bytearray(1920*1080*3)
+        for y in range(1080):
+            for x in range(1920):
+                gray=(90 if x<960 else 190)+rng.randrange(-8,9)
+                at=(y*1920+x)*3;pixels[at:at+3]=bytes((gray,gray,gray))
+        image=Image.frombytes('RGB',image.size,bytes(pixels));image.save(OUT/'grain-source.png')
+        run('ffmpeg','-y','-v','error','-loop','1','-framerate','30','-i',str(OUT/'grain-source.png'),
+            '-f','lavfi','-i','sine=frequency=440:sample_rate=48000:duration=4',
+            '-t','4','-c:v','libx264','-preset','ultrafast','-crf','0','-pix_fmt','yuv420p','-c:a','aac','-shortest',str(fixture))
+    elif SCENARIO=='stabilization':
         import random
         from PIL import ImageDraw
         rng=random.Random(42)
@@ -579,7 +655,7 @@ def main():
     run('adb', 'forward', 'tcp:7420', 'tcp:7420')
     rpc = Rpc()
     scenario = os.environ.get('EDITPOP_TEST_SCENARIO','full')
-    assert scenario in ('full','ui-export','scene-cuts','audio-cleanup','stabilization'), scenario
+    assert scenario in ('full','ui-export','scene-cuts','audio-cleanup','stabilization','grain-reduction'), scenario
     width,height = 1920,1080
     rpc.call('project.create', location=WORK, name=PROJECT_NAME, video={'width':width,'height':height,'rateNum':30,'rateDen':1})
     imported = rpc.call('media.import', path=PROJECT, file=FIXTURE)
@@ -590,7 +666,7 @@ def main():
     rpc.call('project.close', path=PROJECT, save=True)
     rpc.close()
     restart()
-    click_label({'scene-cuts':'Escenas','audio-cleanup':'^Audio','stabilization':'Camara'}.get(scenario,'Prueba'), '01-home')
+    click_label({'scene-cuts':'Escenas','audio-cleanup':'^Audio','stabilization':'Camara','grain-reduction':'Grano'}.get(scenario,'Prueba'), '01-home')
     time.sleep(3)
     if scenario=='ui-export':
         ui_export_check()
@@ -615,6 +691,9 @@ def main():
         return
     if scenario=='stabilization':
         stabilization_check()
+        return
+    if scenario=='grain-reduction':
+        grain_reduction_check()
         return
     toolbar('Dividir', '03-split')
     d = document('04-split', lambda d: len(d.get('clips', [])) == 2)

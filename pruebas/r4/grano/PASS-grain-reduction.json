@@ -1,0 +1,73 @@
+{
+  "result": "PASS",
+  "scope": "Android30 actual Reducir grano catalogue application, save/reopen,1080p UI export; noise and edge measured against same Android project without effect, shared preview/export; synthetic stationary grain, not physical Samsung",
+  "measurements": {
+    "left": {
+      "control_stddev_rgb": [
+        4.245827708620263,
+        4.245827708620263,
+        4.245827708620263
+      ],
+      "filtered_stddev_rgb": [
+        2.460408712679885,
+        2.460408712679885,
+        2.460408712679885
+      ],
+      "noise_ratio": 0.5794885901009457
+    },
+    "right": {
+      "control_stddev_rgb": [
+        4.272646570999457,
+        4.272646570999457,
+        4.272646570999457
+      ],
+      "filtered_stddev_rgb": [
+        2.552152780300309,
+        2.552152780300309,
+        2.552152780300309
+      ],
+      "noise_ratio": 0.5973236348690805
+    },
+    "edge_contrast": 99.57995495495496,
+    "preview_export_mae": 1.147757523148148,
+    "preview_control_mae": 2.2557011959876543,
+    "ui_export_round_trip_seconds_including_OCR_and_validation": 271.24248681800003
+  },
+  "actions": [
+    {
+      "tap": "Grano",
+      "x": 404.0,
+      "y": 771.0
+    },
+    {
+      "tap": "Clip",
+      "x": 643.0,
+      "y": 1608.5
+    },
+    {
+      "tap": "Efect",
+      "x": 840.0,
+      "y": 2212.5
+    },
+    {
+      "tap": "Buscar",
+      "x": 148.5,
+      "y": 1328.0
+    },
+    {
+      "tap": "Grano",
+      "x": 404.0,
+      "y": 771.0
+    },
+    {
+      "tap": "Exportar from visible button OCR",
+      "x": 930.5,
+      "y": 126.0
+    },
+    {
+      "tap": "Exportar from visible button OCR",
+      "x": 540.0,
+      "y": 2192.5
+    }
+  ]
+}

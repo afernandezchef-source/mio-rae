@@ -1,0 +1,49 @@
+Verifies
+Verified using v1 scheme (JAR signing): false
+Verified using v2 scheme (APK Signature Scheme v2): true
+Verified using v3 scheme (APK Signature Scheme v3): true
+Verified using v3.1 scheme (APK Signature Scheme v3.1): false
+Verified using v4 scheme (APK Signature Scheme v4): false
+Verified for SourceStamp: false
+Number of signers: 1
+Signer #1 certificate DN: CN=EditPop Pruebas
+Signer #1 certificate SHA-256 digest: 367e653b8cdf0206aeaa6cbf70783a74e084baef418cb3e366f54395bd0b8b2a
+Signer #1 certificate SHA-1 digest: 35551e346a322ad2fd6f33315156887cfea23fd2
+Signer #1 certificate MD5 digest: 5ed01af1b23fa5deec438f410dee41b4
+Signer #1 key algorithm: RSA
+Signer #1 key size (bits): 2048
+Signer #1 public key SHA-256 digest: 0498b5f225e562e55d422627d0ab6d364512f675be0fc5a997a55aec918c0cff
+Signer #1 public key SHA-1 digest: 15a19e93c92bff322e4b4dfa691f5201f3b72508
+Signer #1 public key MD5 digest: 4d72fb980a990fdea0f4ba1e86bfc666
+package: name='cl.kokumix.editpop.concatcandidate' versionCode='16777736' versionName='0.2.8' platformBuildVersionName='15' platformBuildVersionCode='35' compileSdkVersion='35' compileSdkVersionCodename='15'
+sdkVersion:'26'
+targetSdkVersion:'35'
+uses-permission: name='android.permission.INTERNET'
+uses-permission: name='android.permission.RECORD_AUDIO'
+application-label:'EditPop Pruebas'
+application-icon-160:'res/drawable/editpop_icon.xml'
+application-icon-240:'res/drawable/editpop_icon.xml'
+application-icon-320:'res/drawable/editpop_icon.xml'
+application-icon-480:'res/drawable/editpop_icon.xml'
+application-icon-640:'res/drawable/editpop_icon.xml'
+application: label='EditPop Pruebas' icon='res/drawable/editpop_icon.xml'
+launchable-activity: name='android.app.NativeActivity'  label='' icon=''
+feature-group: label=''
+  uses-feature: name='android.hardware.faketouch'
+  uses-implied-feature: name='android.hardware.faketouch' reason='default feature for all apps'
+  uses-feature: name='android.hardware.microphone'
+  uses-implied-feature: name='android.hardware.microphone' reason='requested android.permission.RECORD_AUDIO permission'
+  uses-feature: name='android.hardware.screen.portrait'
+  uses-implied-feature: name='android.hardware.screen.portrait' reason='one or more activities have specified a portrait orientation'
+main
+supports-screens: 'small' 'normal' 'large' 'xlarge'
+supports-any-density: 'true'
+locales: '--_--'
+densities: '160' '240' '320' '480' '640'
+native-code: 'arm64-v8a'
+ELF 16 KiB PASS: lib/arm64-v8a/libc++_shared.so
+ELF 16 KiB PASS: lib/arm64-v8a/libsherpa-onnx-c-api.so
+ELF 16 KiB PASS: lib/arm64-v8a/libonnxruntime.so
+ELF 16 KiB PASS: lib/arm64-v8a/libconcat_android.so
+Structural checks PASS; Android runtime validation still required.
+e6e4f82b59fc1fcbf6f621ba9fd446c40aaee1112284b53cdffa14b873d095ce  /workspace/editpop-deliveries/EditPop-Pruebas-r4.apk

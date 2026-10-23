@@ -1,0 +1,43 @@
+{
+  "result": "PASS",
+  "scope": "Real UI Export buttons, H264/AAC1080p and completed MediaStore publication; synthetic project; no Samsung test",
+  "publication_seconds_including_polling": 260.856011141,
+  "timeout_seconds": 420,
+  "actions": [
+    {
+      "tap": "Grano",
+      "x": 404.0,
+      "y": 771.0
+    },
+    {
+      "tap": "Clip",
+      "x": 643.0,
+      "y": 1608.5
+    },
+    {
+      "tap": "Efect",
+      "x": 840.0,
+      "y": 2212.5
+    },
+    {
+      "tap": "Buscar",
+      "x": 148.5,
+      "y": 1328.0
+    },
+    {
+      "tap": "Grano",
+      "x": 404.0,
+      "y": 771.0
+    },
+    {
+      "tap": "Exportar from visible button OCR",
+      "x": 930.5,
+      "y": 126.0
+    },
+    {
+      "tap": "Exportar from visible button OCR",
+      "x": 540.0,
+      "y": 2192.5
+    }
+  ]
+}

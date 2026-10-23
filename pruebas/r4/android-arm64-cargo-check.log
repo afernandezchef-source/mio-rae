@@ -1,0 +1,43 @@
+   Compiling concat-effects v0.2.8 (/workspace/Concat/src/crates/concat-effects)
+warning: variable does not need to be mutable
+   --> patches/whisper-rs-sys/build.rs:154:13
+    |
+154 |         let mut bindings = bindgen::Builder::default()
+    |             ----^^^^^^^^
+    |             |
+    |             help: remove this `mut`
+    |
+    = note: `#[warn(unused_mut)]` (part of `#[warn(unused)]`) on by default
+
+warning: `whisper-rs-sys` (build script) generated 1 warning
+    Checking concat-export v0.2.8 (/workspace/Concat/src/crates/concat-export)
+    Checking concat-host v0.2.8 (/workspace/Concat/src/crates/concat-host)
+    Checking concat-api v0.2.8 (/workspace/Concat/src/crates/concat-api)
+    Checking concat-server v0.2.8 (/workspace/Concat/src/crates/concat-server)
+    Checking concat-speech v0.2.8 (/workspace/Concat/src/crates/concat-speech)
+    Checking concat-mcp v0.2.8 (/workspace/Concat/src/crates/concat-mcp)
+warning: concat-android@0.2.8: ANDROID_BUILD_TOOLS_VERSION environment variable is not set, using '35.0.0'.
+    Checking concat v0.2.8 (/workspace/Concat/src/crates/concat)
+warning: missing documentation for a struct field
+   --> crates/concat/src/platform.rs:740:9
+    |
+740 |         video: bool,
+    |         ^^^^^^^^^^^
+    |
+    = note: requested on the command line with `-W missing-docs`
+
+warning: missing documentation for a struct field
+   --> crates/concat/src/platform.rs:741:9
+    |
+741 |         audio: bool,
+    |         ^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+   --> crates/concat/src/platform.rs:742:9
+    |
+742 |         image: bool,
+    |         ^^^^^^^^^^^
+
+warning: `concat` (lib) generated 3 warnings
+    Checking concat-android v0.2.8 (/workspace/Concat/src/crates/concat-android)
+    Finished `quick` profile [optimized] target(s) in 6.87s

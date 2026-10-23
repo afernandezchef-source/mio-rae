@@ -1,0 +1,8 @@
+{
+  "result": "PASS",
+  "url": "https://github.com/afernandezchef-source/mio-rae/raw/refs/heads/editpop/download-r4/EditPop-Pruebas-r4.apk",
+  "bytes": 90522743,
+  "sha256": "e6e4f82b59fc1fcbf6f621ba9fd446c40aaee1112284b53cdffa14b873d095ce",
+  "complete_HTTPS_download_equal_to_signed_APK": true,
+  "checked_utc": "2026-10-23T00:14:20.863276+00:00"
+}

@@ -33,7 +33,7 @@ fuerza por defecto; borde conservado; intensidad0 idéntica dentro de precisión
 half-float; sondas de color plano, transparencia y luces altas pasan. El test
 exige un adaptador y no acepta saltarse la GPU como un éxito.
 
-No es una medida de rendimiento en GPU física. Prueba Android preparada:
+No es una medida de rendimiento en GPU física. Prueba Android realizada:
 importación de vídeo H.264 con grano estacionario conocido y borde vertical,
 aplicar desde catálogo con pulsaciones, guardar/reabrir, exportar1080p a galería,
 comparar ruido y borde con otra exportación del mismo proyecto sin efecto,
